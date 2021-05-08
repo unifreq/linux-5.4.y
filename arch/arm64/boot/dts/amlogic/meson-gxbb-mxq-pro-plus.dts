@@ -1,0 +1,138 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * Copyright (c) 2016 Andreas Färber
+ */
+
+/dts-v1/;
+
+#include "meson-gxbb-vega-s95.dtsi"
+
+/ {
+	compatible = "crocon,mxq-pro-plus", "amlogic,meson-gxbb";
+	model = "MXQ Pro+ (S905)";
+/*
+	reserved-memory {
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+
+		linux,secmon {
+			compatible = "aml_secmon_memory";
+			reg = < 0x00 0x10000000 0x00 0x200000 >;
+			no-map;
+			linux,phandle = < 0x0e >;
+			phandle = < 0x0e >;
+		};
+
+		linux,secos {
+			compatible = "amlogic, secos_memory";
+			reg = < 0x00 0x5300000 0x00 0x2000000 >;
+			no-map;
+			linux,phandle = < 0x0f >;
+			phandle = < 0x0f >;
+		};
+
+		aml_pstore {
+			compatible = "amlogic, pstore";
+			reg = < 0x00 0x20000000 0x00 0x100000 >;
+			no-map;
+		};
+
+		linux,meson-fb {
+			compatible = "amlogic, fb-memory";
+			size = < 0x00 0x2000000 >;
+			no-map;
+			linux,phandle = < 0x1c >;
+			phandle = < 0x1c >;
+		};
+
+		linux,di {
+			compatible = "amlogic, di-mem";
+			size = < 0x00 0x1e00000 >;
+			multi-use;
+			linux,phandle = < 0x23 >;
+			phandle = < 0x23 >;
+		};
+
+		linux,ion-dev {
+			compatible = "amlogic, idev-mem";
+			size = < 0x00 0x2000000 >;
+			multi-use;
+			linux,phandle = < 0x21 >;
+			phandle = < 0x21 >;
+		};
+
+		linux,codec_mm_cma {
+			compatible = "shared-dma-pool";
+			reusable;
+			size = < 0x00 0xc000000 >;
+			alignment = < 0x00 0x400000 >;
+			linux,contiguous-region;
+			linux,phandle = < 0x1d >;
+			phandle = < 0x1d >;
+		};
+
+		linux,picdec {
+			compatible = "shared-dma-pool";
+			reusable;
+			size = < 0x00 0x3000000 >;
+			alignment = < 0x00 0x400000 >;
+			linux,contiguous-region;
+			linux,phandle = < 0x22 >;
+			phandle = < 0x22 >;
+		};
+
+		linux,codec_mm_reserved {
+			compatible = "amlogic, codec-mm-reserved";
+			size = < 0x00 0x4100000 >;
+			alignment = < 0x00 0x100000 >;
+			linux,phandle = < 0x1e >;
+			phandle = < 0x1e >;
+		};
+	};
+*/
+
+	reserved-memory {
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+
+                /* 32 MiB reserved for ARM Trusted Firmware (BL32) */
+                secmon_reserved_bl32: secmon@5300000 {
+                        reg = <0x0 0x05300000 0x0 0x2000000>;
+                        no-map;
+                };
+
+		/* 2MiB reserved for ARM Trusted Firmware (BL31) */
+		secmon: secmon {
+			reg = <0x0 0x10000000 0x0 0x200000>;
+			no-map;
+		};
+	};
+
+	memory@0 {
+		device_type = "memory";
+		/*
+		 * The first 16MiB of the DDR memory zone
+		 * is reserved to the Hardware ROM Firmware
+		 */
+		linux,usable-memory = <0x0 0x1000000 0x0 0x7f000000>;
+	};
+};
+
+&ethmac {
+	amlogic,tx-delay-ns = <4>;
+	snps,aal;
+	snps,txpbl = <0x8>;
+	snps,rxpbl = <0x8>;
+};
+
+/*
+&eth_phy0 {
+	interrupts = <25 IRQ_TYPE_LEVEL_LOW>;
+};
+*/
+
+&sd_emmc_c {
+	max-frequency = <200000000>;	
+};

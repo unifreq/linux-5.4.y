@@ -1,0 +1,88 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * Copyright (c) 2019 BayLibre, SAS
+ * Author: flippy <flippy@sina.com>
+ */
+/dts-v1/;
+
+#include "meson-sm1-x96-max-plus.dts"
+
+/ {
+	model = "Ugoos X3";
+
+	aliases {
+		rtc0 = &rtc;
+		rtc1 = &vrtc;
+	};
+
+	leds {
+		compatible = "gpio-leds";
+
+		red_led {
+			label = "red";
+			gpios = <&gpio_ao GPIOAO_10 GPIO_ACTIVE_LOW>;
+			default-state = "off";
+			linux,default-trigger = "usb-host";
+		};
+
+		blue_led {
+			label = "blue";
+			gpios = <&gpio_ao GPIOAO_11 GPIO_ACTIVE_LOW>;
+			default-state = "on";
+		};
+	};
+
+        usb_pwr_en: regulator-usb-pwr-en {
+                compatible = "regulator-fixed";
+                regulator-name = "USB_PWR_EN";
+                regulator-min-microvolt = <5000000>;
+                regulator-max-microvolt = <5000000>;
+                vin-supply = <&vcc_5v>;
+
+                gpio = <&gpio GPIOH_5 GPIO_ACTIVE_HIGH>;
+                enable-active-high;
+        };
+};
+
+&sd_emmc_a {
+	///delete-property/ sd-uhs-sdr50;
+	//sd-uhs-sdr12;
+	//sd-uhs-sdr25;
+	//sd-uhs-sdr50;
+	max-frequency = <100000000>;
+};
+
+&sd_emmc_b {
+	max-frequency = <50000000>;
+};
+
+/* eMMC */
+&sd_emmc_c {
+        max-frequency = <200000000>;
+};
+
+&i2c3 {
+	status = "okay";
+	pinctrl-0 = <&i2c3_sda_a_pins>, <&i2c3_sck_a_pins>;
+	pinctrl-names = "default";
+
+	rtc: rtc@51 {
+		compatible = "nxp,pcf8563";
+		reg = <0x51>;
+		wakeup-source;
+	};
+};
+
+&usb {
+	status = "okay";
+	vbus-supply = <&usb_pwr_en>;
+};
+
+&usb2_phy0 {
+	phy-supply = <&vcc_5v>;
+};
+
+&usb2_phy1 {
+	phy-supply = <&vcc_5v>;
+};
+

@@ -1,0 +1,22 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * Copyright (c) 2019 BayLibre, SAS
+ * Author: flippy <flippy@sina.com>
+ */
+/dts-v1/;
+
+#include "meson-sm1-x96-max-plus.dts"
+
+/ {
+	model = "HK1 Box/Vontar X3";
+};
+
+&sd_emmc_a {
+	/delete-property/ sd-uhs-sdr104;
+	sd-uhs-sdr50;
+        max-frequency = <100000000>;
+};
+
+&sd_emmc_b {
+	max-frequency = <25000000>;
+};

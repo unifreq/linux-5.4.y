@@ -1,0 +1,27 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+// Copyright (C) 2019 Ondřej Jirman <megous@megous.com>
+
+/dts-v1/;
+
+#include "sun50i-h6-vplus-cloud.dts"
+
+&reg_usb_vbus {
+	regulator-name = "vbus";
+};
+
+&soc {
+	/delete-node/ dwc3@5200000;
+	/delete-node/ phy@5210000;
+	usb3: usb3@5200000 {
+		compatible = "allwinner,sun50i-h6-xhci";
+		reg = <0x05200000 0x100000>;
+		interrupts = <GIC_SPI 26 IRQ_TYPE_LEVEL_HIGH>;
+		clocks = <&ccu CLK_BUS_XHCI>, <&ccu CLK_USB_PHY1>;
+		clock-names = "xhci", "phy";
+		resets = <&ccu RST_BUS_XHCI>, <&ccu RST_USB_PHY1>;
+		reset-names = "xhci", "phy";
+		#phy-cells = <0>;
+		phy-supply = <&reg_usb_vbus>;
+		status = "okay";
+	};
+};

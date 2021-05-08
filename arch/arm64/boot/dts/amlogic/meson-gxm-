@@ -1,0 +1,63 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * Copyright (c) 2018 He Yangxuan
+ * Copyright (c) 2020 Flippy
+ */
+
+/dts-v1/;
+
+#include "meson-gxl-s905d-p230.dts"
+
+/ {
+	compatible = "phicomm,n1", "amlogic,s905d", "amlogic,meson-gxl";
+	model = "Phicomm N1";
+
+	dc_in: regulator-vcc_12v {
+		compatible = "regulator-fixed";
+		regulator-name = "VCC_12V";
+		regulator-min-microvolt = <12000000>;
+		regulator-max-microvolt = <12000000>;
+		regulator-boot-on;
+		regulator-always-on;
+	};
+
+	cvbs-connector {
+		status = "disabled";
+	};
+
+	leds {
+		compatible = "gpio-leds";
+
+		status {
+			label = "n1:white:status";
+			gpios = <&gpio_ao GPIOAO_9 GPIO_ACTIVE_HIGH>;
+			default-state = "on";
+		};
+	};
+};
+
+&cvbs_vdac_port {
+	status = "disabled";
+};
+
+&sd_emmc_a {
+	max-frequency = <100000000>;
+	sd-uhs-sdr50;
+};
+
+&sd_emmc_b {
+	status = "okay";
+};
+
+&external_phy {
+	reset-assert-us =    <30000>;
+	reset-deassert-us = <100000>;
+	reset-gpios = <&gpio GPIOZ_14 GPIO_ACTIVE_LOW>;
+	interrupts = <25 IRQ_TYPE_LEVEL_LOW>;
+};
+
+&ethmac {
+	snps,aal;
+	snps,txpbl = <0x8>;
+	snps,rxpbl = <0x8>;
+};

@@ -1,0 +1,26 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * Copyright (c) 2019 BayLibre, SAS
+ * Author: flippy <flippy@sina.com>
+ */
+/dts-v1/;
+
+#include "meson-sm1-x96-max-plus.dts"
+
+/ {
+	model = "H96 Max X3";
+};
+
+&sd_emmc_a {
+	/delete-property/ sd-uhs-sdr104;
+	max-frequency = <50000000>;
+};
+
+&sd_emmc_b {
+	max-frequency = <50000000>;
+};
+
+/* EMMC */
+&sd_emmc_c {
+	max-frequency = <200000000>;
+};
