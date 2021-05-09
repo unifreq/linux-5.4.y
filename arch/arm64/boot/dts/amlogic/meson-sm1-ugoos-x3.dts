@@ -67,9 +67,13 @@
 	pinctrl-names = "default";
 
 	rtc: rtc@51 {
-		compatible = "nxp,pcf8563";
-		reg = <0x51>;
-		wakeup-source;
+                compatible = "haoyu,hym8563";
+                reg = <0x51>;
+                wakeup-source;
+                
+                #clock-cells = <0>;
+                clock-frequency = <32768>;
+                clock-output-names = "xin32k";
 	};
 };
 
