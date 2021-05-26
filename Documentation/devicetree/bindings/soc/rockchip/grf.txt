@@ -33,6 +33,8 @@ Required Properties:
    - "rockchip,rk3328-usb2phy-grf", "syscon": for rk3328
 - compatible: USBGRF should be one of the following
    - "rockchip,rv1108-usbgrf", "syscon": for rv1108
+- compatible: USB3PHYGRF should be one of the following:
+   - "rockchip,u3phy-grf", "syscon"
 - reg: physical base address of the controller and length of memory mapped
   region.
 
