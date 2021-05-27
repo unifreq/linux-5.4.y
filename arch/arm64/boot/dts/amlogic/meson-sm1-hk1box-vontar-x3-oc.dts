@@ -8,13 +8,13 @@
 #include "meson-sm1-hk1box-vontar-x3.dts"
 
 / {
-	model = "HK1 Box/Vontar X3 @ 2184Mhz";
+	model = "HK1 Box/Vontar X3 @ 2208Mhz";
 };
 
 &cpu_opp_table {
 
-	opp-2184000000 {
-		opp-hz = /bits/ 64 <2184000000>;
-		opp-microvolt = <1022000>;
+	opp-2208000000 {
+		opp-hz = /bits/ 64 <2208000000>;
+		opp-microvolt = <1021000>;
 	};
 };

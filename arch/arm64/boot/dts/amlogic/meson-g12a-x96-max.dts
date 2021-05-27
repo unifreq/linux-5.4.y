@@ -11,8 +11,9 @@
 #include <dt-bindings/sound/meson-g12a-tohdmitx.h>
 
 / {
-	compatible = "amediatech,x96-max", "amlogic,g12a";
+	//compatible = "amediatech,x96-max", "amlogic,g12a";
 	//model = "Shenzhen Amediatech Technology Co., Ltd X96 Max";
+	compatible = "amlogic,g12a";
 	model = "AMedia X96 Max";
 
 	aliases {
@@ -33,7 +34,7 @@
 
 	memory@0 {
 		device_type = "memory";
-		reg = <0x0 0x0 0x0 0x40000000>;
+		reg = <0x0 0x0 0x0 0x80000000>;
 	};
 
 	cvbs-connector {
@@ -150,20 +151,20 @@
 		regulator-always-on;
 	};
 
-        vddgpu: regulator-vddgpu {
-                compatible = "regulator-fixed";
-                regulator-name = "mali";
-                //regulator-name = "VDDGPU";
-                regulator-min-microvolt = <800000>;
-                regulator-max-microvolt = <800000>;
-                vin-supply = <&dc_in>;
-                regulator-boot-on;
-                regulator-always-on;
-        };
+	vddgpu: regulator-vddgpu {
+		compatible = "regulator-fixed";
+		regulator-name = "mali";
+		//regulator-name = "VDDGPU";
+		regulator-min-microvolt = <800000>;
+		regulator-max-microvolt = <800000>;
+		vin-supply = <&dc_in>;
+		regulator-boot-on;
+		regulator-always-on;
+	};
 
 	sound {
 		compatible = "amlogic,axg-sound-card";
-		model = "G12A-X96-MAX";
+		model = "X96-MAX";
 		audio-aux-devs = <&tdmout_b>;
 		audio-routing = "TDMOUT_B IN 0", "FRDDR_A OUT 1",
 				"TDMOUT_B IN 1", "FRDDR_B OUT 1",
@@ -371,16 +372,20 @@
 
 	pinctrl-0 = <&eth_pins>, <&eth_rgmii_pins>;
 	pinctrl-names = "default";
-
+	phy-mode = "rgmii";
 	phy-handle = <&external_phy>;
 
 	amlogic,tx-delay-ns = <2>;
-	phy-mode = "rgmii";
+
+	snps,aal;
+	snps,rxpbl = <0x8>;
+	snps,txpbl = <0x8>;
+
+	rx-fifo-depth = <4096>;
+	tx-fifo-depth = <4096>;
 
 	nvmem-cells = <&eth_mac>;
 	nvmem-cell-names = "eth_mac";
-        //snps,aal;
-        //snps,pbl = <0x8>;
 };
 
 &pwm_ef {
@@ -430,6 +435,8 @@
 	cap-sd-highspeed;
 	sd-uhs-sdr50;
 	max-frequency = <100000000>;
+	//sd-uhs-sdr104;
+	//max-frequency = <200000000>;
 
 	non-removable;
 	disable-wp;
@@ -471,16 +478,15 @@
 /* eMMC */
 &sd_emmc_c {
 	status = "okay";
-	pinctrl-0 = <&emmc_pins>, <&emmc_ds_pins>;
+	pinctrl-0 = <&emmc_ctrl_pins>, <&emmc_data_8b_pins>, <&emmc_ds_pins>;
 	pinctrl-1 = <&emmc_clk_gate_pins>;
 	pinctrl-names = "default", "clk-gate";
 
 	bus-width = <8>;
 	cap-mmc-highspeed;
-	mmc-ddr-1_8v;
-	mmc-hs200-1_8v;
-	//max-frequency = <100000000>;
-	max-frequency = <200000000>;
+        mmc-ddr-1_8v;
+        mmc-hs200-1_8v;
+        max-frequency = <200000000>;
 	non-removable;
 	disable-wp;
 
@@ -512,16 +518,25 @@
 };
 
 &cpu_opp_table {
+        opp-100000000 {
+		status = "disabled";
+	};
 
-                opp-1944000000 {
-                        opp-hz = /bits/ 64 <1944000000>;
-                        opp-microvolt = <1021000>;
-                };
+        opp-250000000 {
+		status = "disabled";
+	};
 
+        opp-500000000 {
+		status = "disabled";
+	};
+
+	opp-1908000000 {
+		opp-hz = /bits/ 64 <1908000000>;
+		opp-microvolt = <1011000>;
+	};
 };
 
 &efuse {
-
 	eth_mac: eth_mac@0 {
 		reg = <0x0 0x06>;
 	};
@@ -537,5 +552,4 @@
 	usid: usid@18 {
 		reg = <0x12 0x10>;
 	};
-
 };
