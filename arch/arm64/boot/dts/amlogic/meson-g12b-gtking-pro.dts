@@ -54,13 +54,13 @@
 			opp-microvolt = <751000>;
 		};
 
-		opp-1404000000 {
-			opp-hz = /bits/ 64 <1404000000>;
+		opp-1398000000 {
+			opp-hz = /bits/ 64 <1398000000>;
 			opp-microvolt = <781000>;
 		};
 
-		opp-1500000000 {
-			opp-hz = /bits/ 64 <1500000000>;
+		opp-1512000000 {
+			opp-hz = /bits/ 64 <1512000000>;
 			opp-microvolt = <821000>;
 		};
 
@@ -136,13 +136,13 @@
 			opp-microvolt = <761000>;
 		};
 
-		opp-1404000000 {
-			opp-hz = /bits/ 64 <1404000000>;
+		opp-1398000000 {
+			opp-hz = /bits/ 64 <1398000000>;
 			opp-microvolt = <801000>;
 		};
 
-		opp-1500000000 {
-			opp-hz = /bits/ 64 <1500000000>;
+		opp-1512000000 {
+			opp-hz = /bits/ 64 <1512000000>;
 			opp-microvolt = <831000>;
 		};
 
