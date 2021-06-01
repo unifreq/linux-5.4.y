@@ -13,11 +13,6 @@
 
 };
 
-&external_phy {
-	reset-assert-us =    <30000>;
-	reset-deassert-us = <100000>;
-};
-
 &ethmac {
 	snps,aal;
 	snps,txpbl = <0x8>;

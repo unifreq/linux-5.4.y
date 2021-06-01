@@ -56,22 +56,6 @@
 	dr_mode = "host";
 };
 
-&cpu0 {
-       clock-latency = <50000>;
-};
-
-&cpu1 {
-       clock-latency = <50000>;
-};
-
-&cpu2 {
-       clock-latency = <50000>;
-};
-
-&cpu3 {
-       clock-latency = <50000>;
-};
-
 &sd_emmc_a {
 	max-frequency = <100000000>;
 	sd-uhs-sdr50;
@@ -83,13 +67,6 @@
 
 &sd_emmc_b {
        status = "disabled";
-};
-
-&external_phy {
-       reset-assert-us =    <30000>;
-       reset-deassert-us = <100000>;
-       reset-gpios = <&gpio GPIOZ_14 GPIO_ACTIVE_LOW>;
-       interrupts = <25 IRQ_TYPE_LEVEL_LOW>;
 };
 
 &ethmac {

@@ -11,9 +11,8 @@
 #include <dt-bindings/sound/meson-g12a-tohdmitx.h>
 
 / {
-	//compatible = "amediatech,x96-max", "amlogic,g12a";
+	compatible = "amediatech,x96-max", "amlogic,g12a";
 	//model = "Shenzhen Amediatech Technology Co., Ltd X96 Max";
-	compatible = "amlogic,g12a";
 	model = "AMedia X96 Max";
 
 	aliases {
@@ -151,16 +150,15 @@
 		regulator-always-on;
 	};
 
-	vddgpu: regulator-vddgpu {
-		compatible = "regulator-fixed";
-		regulator-name = "mali";
-		//regulator-name = "VDDGPU";
-		regulator-min-microvolt = <800000>;
-		regulator-max-microvolt = <800000>;
-		vin-supply = <&dc_in>;
-		regulator-boot-on;
-		regulator-always-on;
-	};
+        vddgpu: regulator-vddgpu {
+                compatible = "regulator-fixed";
+                regulator-name = "mali";
+                regulator-min-microvolt = <800000>;
+                regulator-max-microvolt = <800000>;
+                vin-supply = <&dc_in>;
+                regulator-boot-on;
+                regulator-always-on;
+        };
 
 	sound {
 		compatible = "amlogic,axg-sound-card";
@@ -357,8 +355,8 @@
 		max-speed = <1000>;
 		eee-broken-1000t;
 
-		reset-assert-us = <30000>;
-		reset-deassert-us = <100000>;
+		reset-assert-us = <10000>;
+		reset-deassert-us = <80000>;
 		reset-gpios = <&gpio GPIOZ_15 (GPIO_ACTIVE_LOW | GPIO_OPEN_DRAIN)>;
 
 		interrupt-parent = <&gpio_intc>;
@@ -435,8 +433,6 @@
 	cap-sd-highspeed;
 	sd-uhs-sdr50;
 	max-frequency = <100000000>;
-	//sd-uhs-sdr104;
-	//max-frequency = <200000000>;
 
 	non-removable;
 	disable-wp;
@@ -452,8 +448,6 @@
 	brcmf: wifi@1 {
 		reg = <1>;
 		compatible = "brcm,bcm4329-fmac";
-		nvmem-cells = <&wifi_mac>;
-		nvmem-cell-names = "wifi_mac";
 	};
 };
 
@@ -466,7 +460,6 @@
 
 	bus-width = <4>;
 	cap-sd-highspeed;
-	//max-frequency = <100000000>;
 	max-frequency = <50000000>;
 	disable-wp;
 
@@ -484,9 +477,9 @@
 
 	bus-width = <8>;
 	cap-mmc-highspeed;
-        mmc-ddr-1_8v;
-        mmc-hs200-1_8v;
-        max-frequency = <200000000>;
+	mmc-ddr-1_8v;
+	mmc-hs200-1_8v;
+	max-frequency = <200000000>;
 	non-removable;
 	disable-wp;
 
@@ -518,38 +511,38 @@
 };
 
 &cpu_opp_table {
-        opp-100000000 {
+	opp-100000000 {
 		status = "disabled";
 	};
 
-        opp-250000000 {
+	opp-250000000 {
 		status = "disabled";
 	};
 
-        opp-500000000 {
+	opp-500000000 {
 		status = "disabled";
 	};
 
-	opp-1908000000 {
-		opp-hz = /bits/ 64 <1908000000>;
-		opp-microvolt = <1011000>;
-	};
+        opp-1908000000 {
+                opp-hz = /bits/ 64 <1908000000>;
+                opp-microvolt = <1021000>;
+        };
 };
 
 &efuse {
-	eth_mac: eth_mac@0 {
-		reg = <0x0 0x06>;
-	};
+        eth_mac: eth_mac@0 {
+                reg = <0x0 0x06>;
+        };
 
-	bt_mac: bt_mac@6 {
-		reg = <0x6 0x06>;
-	};
+        bt_mac: bt_mac@6 {
+                reg = <0x6 0x06>;
+        };
 
-	wifi_mac: wifi_mac@12 {
-		reg = <0x0c 0x06>;
-	};
+        wifi_mac: wifi_mac@12 {
+                reg = <0x0c 0x06>;
+        };
 
-	usid: usid@18 {
-		reg = <0x12 0x10>;
-	};
+        usid: usid@18 {
+                reg = <0x12 0x10>;
+        };
 };
