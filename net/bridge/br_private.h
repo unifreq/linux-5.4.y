@@ -345,8 +345,6 @@ struct net_bridge {
 	u16				group_fwd_mask;
 	u16				group_fwd_mask_required;
 
-	bool				disable_eap_hack;
-
 	/* STP */
 	bridge_id			designated_root;
 	bridge_id			bridge_id;

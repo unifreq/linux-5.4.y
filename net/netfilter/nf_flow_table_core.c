@@ -7,12 +7,12 @@
 #include <linux/netdevice.h>
 #include <net/ip.h>
 #include <net/ip6_route.h>
+#include <net/netfilter/nf_tables.h>
 #include <net/netfilter/nf_flow_table.h>
 #include <net/netfilter/nf_conntrack.h>
 #include <net/netfilter/nf_conntrack_core.h>
 #include <net/netfilter/nf_conntrack_l4proto.h>
 #include <net/netfilter/nf_conntrack_tuple.h>
-#include <net/netfilter/nf_conntrack_acct.h>
 
 struct flow_offload_entry {
 	struct flow_offload	flow;
@@ -164,22 +164,6 @@ void flow_offload_free(struct flow_offload *flow)
 }
 EXPORT_SYMBOL_GPL(flow_offload_free);
 
-void nf_flow_table_acct(struct flow_offload *flow, struct sk_buff *skb, int dir)
-{
-	struct flow_offload_entry *entry;
-	struct nf_conn_acct *acct;
-
-	entry = container_of(flow, struct flow_offload_entry, flow);
-	acct = nf_conn_acct_find(entry->ct);
-	if (acct) {
-		struct nf_conn_counter *counter = acct->counter;
-
-		atomic64_inc(&counter[dir].packets);
-		atomic64_add(skb->len, &counter[dir].bytes);
-	}
-}
-EXPORT_SYMBOL_GPL(nf_flow_table_acct);
-
 static u32 flow_offload_hash(const void *data, u32 len, u32 seed)
 {
 	const struct flow_offload_tuple *tuple = data;
@@ -214,29 +198,10 @@ static const struct rhashtable_params nf_flow_offload_rhash_params = {
 	.automatic_shrinking	= true,
 };
 
-#define        DAY     (86400 * HZ)
-
-/* Set an arbitrary timeout large enough not to ever expire, this save
- * us a check for the IPS_OFFLOAD_BIT from the packet path via
- * nf_ct_is_expired().
- */
-static void nf_ct_offload_timeout(struct flow_offload *flow)
-{
-	struct flow_offload_entry *entry;
-	struct nf_conn *ct;
-
-	entry = container_of(flow, struct flow_offload_entry, flow);
-	ct = entry->ct;
-
-	if (nf_ct_expires(ct) < DAY / 2)
-		ct->timeout = nfct_time_stamp + DAY;
-}
-
 int flow_offload_add(struct nf_flowtable *flow_table, struct flow_offload *flow)
 {
 	int err;
 
-	nf_ct_offload_timeout(flow);
 	flow->timeout = (u32)jiffies + NF_FLOW_TIMEOUT;
 
 	err = rhashtable_insert_fast(&flow_table->rhashtable,
@@ -264,16 +229,10 @@ static inline bool nf_flow_has_expired(const struct flow_offload *flow)
 	return nf_flow_timeout_delta(flow->timeout) <= 0;
 }
 
-static inline bool nf_flow_in_hw(const struct flow_offload *flow)
-{
-	return flow->flags & FLOW_OFFLOAD_HW;
-}
-
 static void flow_offload_del(struct nf_flowtable *flow_table,
 			     struct flow_offload *flow)
 {
 	struct flow_offload_entry *e;
-	struct net *net = read_pnet(&flow_table->ft_net);
 
 	rhashtable_remove_fast(&flow_table->rhashtable,
 			       &flow->tuplehash[FLOW_OFFLOAD_DIR_ORIGINAL].node,
@@ -289,12 +248,6 @@ static void flow_offload_del(struct nf_flowtable *flow_table,
 		flow_offload_fixup_ct(e->ct);
 	else if (flow->flags & FLOW_OFFLOAD_TEARDOWN)
 		flow_offload_fixup_ct_timeout(e->ct);
-
-	if (!(flow->flags & FLOW_OFFLOAD_TEARDOWN))
-		flow_offload_fixup_ct_state(e->ct);
-
-	if (nf_flow_in_hw(flow))
-		nf_flow_offload_hw_del(net, flow);
 
 	flow_offload_free(flow);
 }
@@ -337,7 +290,8 @@ flow_offload_lookup(struct nf_flowtable *flow_table,
 }
 EXPORT_SYMBOL_GPL(flow_offload_lookup);
 
-int nf_flow_table_iterate(struct nf_flowtable *flow_table,
+static int
+nf_flow_table_iterate(struct nf_flowtable *flow_table,
 		      void (*iter)(struct flow_offload *flow, void *data),
 		      void *data)
 {
@@ -350,7 +304,6 @@ int nf_flow_table_iterate(struct nf_flowtable *flow_table,
 	rhashtable_walk_start(&hti);
 
 	while ((tuplehash = rhashtable_walk_next(&hti))) {
-
 		if (IS_ERR(tuplehash)) {
 			if (PTR_ERR(tuplehash) != -EAGAIN) {
 				err = PTR_ERR(tuplehash);
@@ -370,26 +323,15 @@ int nf_flow_table_iterate(struct nf_flowtable *flow_table,
 
 	return err;
 }
-EXPORT_SYMBOL_GPL(nf_flow_table_iterate);
 
 static void nf_flow_offload_gc_step(struct flow_offload *flow, void *data)
 {
 	struct nf_flowtable *flow_table = data;
 	struct flow_offload_entry *e;
-	bool teardown;
 
 	e = container_of(flow, struct flow_offload_entry, flow);
-
-	teardown = flow->flags & (FLOW_OFFLOAD_DYING |
-				  FLOW_OFFLOAD_TEARDOWN);
-
-	if (!teardown)
-		nf_ct_offload_timeout(flow);
-
-	if ((flow->flags & FLOW_OFFLOAD_KEEP) && !teardown)
-		return;
-
-	if (nf_flow_has_expired(flow) || teardown)
+	if (nf_flow_has_expired(flow) || nf_ct_is_dying(e->ct) ||
+	    (flow->flags & (FLOW_OFFLOAD_DYING | FLOW_OFFLOAD_TEARDOWN)))
 		flow_offload_del(flow_table, flow);
 }
 
@@ -518,42 +460,9 @@ int nf_flow_dnat_port(const struct flow_offload *flow,
 }
 EXPORT_SYMBOL_GPL(nf_flow_dnat_port);
 
-static const struct nf_flow_table_hw __rcu *nf_flow_table_hw_hook __read_mostly;
-
-static int nf_flow_offload_hw_init(struct nf_flowtable *flow_table)
-{
-	const struct nf_flow_table_hw *offload;
-
-	if (!rcu_access_pointer(nf_flow_table_hw_hook))
-		request_module("nf-flow-table-hw");
-
-	rcu_read_lock();
-	offload = rcu_dereference(nf_flow_table_hw_hook);
-	if (!offload)
-		goto err_no_hw_offload;
-
-	if (!try_module_get(offload->owner))
-		goto err_no_hw_offload;
-
-	rcu_read_unlock();
-
-	return 0;
-
-err_no_hw_offload:
-	rcu_read_unlock();
-
-	return -EOPNOTSUPP;
-}
-
 int nf_flow_table_init(struct nf_flowtable *flowtable)
 {
 	int err;
-
-	if (flowtable->flags & NF_FLOWTABLE_F_HW) {
-		err = nf_flow_offload_hw_init(flowtable);
-		if (err)
-			return err;
-	}
 
 	INIT_DEFERRABLE_WORK(&flowtable->gc_work, nf_flow_offload_work_gc);
 
@@ -595,8 +504,6 @@ static void nf_flow_table_iterate_cleanup(struct nf_flowtable *flowtable,
 {
 	nf_flow_table_iterate(flowtable, nf_flow_table_do_cleanup, dev);
 	flush_delayed_work(&flowtable->gc_work);
-	if (flowtable->flags & NF_FLOWTABLE_F_HW)
-		flush_work(&nf_flow_offload_hw_work);
 }
 
 void nf_flow_table_cleanup(struct net_device *dev)
@@ -610,26 +517,6 @@ void nf_flow_table_cleanup(struct net_device *dev)
 }
 EXPORT_SYMBOL_GPL(nf_flow_table_cleanup);
 
-struct work_struct nf_flow_offload_hw_work;
-EXPORT_SYMBOL_GPL(nf_flow_offload_hw_work);
-
-/* Give the hardware workqueue the chance to remove entries from hardware.*/
-static void nf_flow_offload_hw_free(struct nf_flowtable *flowtable)
-{
-	const struct nf_flow_table_hw *offload;
-
-	flush_work(&nf_flow_offload_hw_work);
-
-	rcu_read_lock();
-	offload = rcu_dereference(nf_flow_table_hw_hook);
-	if (!offload) {
-		rcu_read_unlock();
-		return;
-	}
-	module_put(offload->owner);
-	rcu_read_unlock();
-}
-
 void nf_flow_table_free(struct nf_flowtable *flow_table)
 {
 	mutex_lock(&flowtable_lock);
@@ -639,87 +526,8 @@ void nf_flow_table_free(struct nf_flowtable *flow_table)
 	nf_flow_table_iterate(flow_table, nf_flow_table_do_cleanup, NULL);
 	nf_flow_table_iterate(flow_table, nf_flow_offload_gc_step, flow_table);
 	rhashtable_destroy(&flow_table->rhashtable);
-	if (flow_table->flags & NF_FLOWTABLE_F_HW)
-		nf_flow_offload_hw_free(flow_table);
 }
 EXPORT_SYMBOL_GPL(nf_flow_table_free);
-
-/* Must be called from user context. */
-void nf_flow_offload_hw_add(struct net *net, struct flow_offload *flow,
-			    struct nf_conn *ct)
-{
-	const struct nf_flow_table_hw *offload;
-
-	rcu_read_lock();
-	offload = rcu_dereference(nf_flow_table_hw_hook);
-	if (offload)
-		offload->add(net, flow, ct);
-	rcu_read_unlock();
-}
-EXPORT_SYMBOL_GPL(nf_flow_offload_hw_add);
-
-/* Must be called from user context. */
-void nf_flow_offload_hw_del(struct net *net, struct flow_offload *flow)
-{
-	const struct nf_flow_table_hw *offload;
-
-	rcu_read_lock();
-	offload = rcu_dereference(nf_flow_table_hw_hook);
-	if (offload)
-		offload->del(net, flow);
-	rcu_read_unlock();
-}
-EXPORT_SYMBOL_GPL(nf_flow_offload_hw_del);
-
-int nf_flow_table_hw_register(const struct nf_flow_table_hw *offload)
-{
-	if (rcu_access_pointer(nf_flow_table_hw_hook))
-		return -EBUSY;
-
-	rcu_assign_pointer(nf_flow_table_hw_hook, offload);
-
-	return 0;
-}
-EXPORT_SYMBOL_GPL(nf_flow_table_hw_register);
-
-void nf_flow_table_hw_unregister(const struct nf_flow_table_hw *offload)
-{
-	WARN_ON(rcu_access_pointer(nf_flow_table_hw_hook) != offload);
-	rcu_assign_pointer(nf_flow_table_hw_hook, NULL);
-
-	synchronize_rcu();
-}
-EXPORT_SYMBOL_GPL(nf_flow_table_hw_unregister);
-
-static int nf_flow_table_netdev_event(struct notifier_block *this,
-				      unsigned long event, void *ptr)
-{
-	struct net_device *dev = netdev_notifier_info_to_dev(ptr);
-
-	if (event != NETDEV_DOWN)
-		return NOTIFY_DONE;
-
-	nf_flow_table_cleanup(dev);
-
-	return NOTIFY_DONE;
-}
-
-static struct notifier_block flow_offload_netdev_notifier = {
-	.notifier_call	= nf_flow_table_netdev_event,
-};
-
-static int __init nf_flow_table_module_init(void)
-{
-	return register_netdevice_notifier(&flow_offload_netdev_notifier);
-}
-
-static void __exit nf_flow_table_module_exit(void)
-{
-	unregister_netdevice_notifier(&flow_offload_netdev_notifier);
-}
-
-module_init(nf_flow_table_module_init);
-module_exit(nf_flow_table_module_exit);
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Pablo Neira Ayuso <pablo@netfilter.org>");

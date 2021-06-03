@@ -156,7 +156,6 @@ static DEFINE_SPINLOCK(offload_lock);
 struct list_head ptype_base[PTYPE_HASH_SIZE] __read_mostly;
 struct list_head ptype_all __read_mostly;	/* Taps */
 static struct list_head offload_base __read_mostly;
-static struct workqueue_struct *napi_workq __read_mostly;
 
 static int netif_rx_internal(struct sk_buff *skb);
 static int call_netdevice_notifiers_info(unsigned long val,
@@ -3189,32 +3188,13 @@ static int xmit_one(struct sk_buff *skb, struct net_device *dev,
 	unsigned int len;
 	int rc;
 
-#ifdef CONFIG_SHORTCUT_FE
-	/* If this skb has been fast forwarded then we don't want it to
-	 * go to any taps (by definition we're trying to bypass them).
-	 */
-	if (!skb->fast_forwarded) {
-#endif
 	if (dev_nit_active(dev))
 		dev_queue_xmit_nit(skb, dev);
-#ifdef CONFIG_SHORTCUT_FE
-	}
-#endif
 
-#ifdef CONFIG_ETHERNET_PACKET_MANGLE
-	if (!dev->eth_mangle_tx ||
-	    (skb = dev->eth_mangle_tx(dev, skb)) != NULL)
-#else
-	if (1)
-#endif
-	{
-		len = skb->len;
-		trace_net_dev_start_xmit(skb, dev);
-		rc = netdev_start_xmit(skb, dev, txq, more);
-		trace_net_dev_xmit(skb, rc, dev, len);
-	} else {
-		rc = NETDEV_TX_OK;
-	}
+	len = skb->len;
+	trace_net_dev_start_xmit(skb, dev);
+	rc = netdev_start_xmit(skb, dev, txq, more);
+	trace_net_dev_xmit(skb, rc, dev, len);
 
 	return rc;
 }
@@ -3404,7 +3384,8 @@ static inline int __dev_xmit_skb(struct sk_buff *skb, struct Qdisc *q,
 
 	if (q->flags & TCQ_F_NOLOCK) {
 		rc = q->enqueue(skb, q, &to_free) & NET_XMIT_MASK;
-		qdisc_run(q);
+		if (likely(!netif_xmit_frozen_or_stopped(txq)))
+			qdisc_run(q);
 
 		if (unlikely(to_free))
 			kfree_skb_list(to_free);
@@ -4535,25 +4516,43 @@ static __latent_entropy void net_tx_action(struct softirq_action *h)
 		sd->output_queue_tailp = &sd->output_queue;
 		local_irq_enable();
 
+		rcu_read_lock();
+
 		while (head) {
 			struct Qdisc *q = head;
 			spinlock_t *root_lock = NULL;
 
 			head = head->next_sched;
 
-			if (!(q->flags & TCQ_F_NOLOCK)) {
-				root_lock = qdisc_lock(q);
-				spin_lock(root_lock);
-			}
 			/* We need to make sure head->next_sched is read
 			 * before clearing __QDISC_STATE_SCHED
 			 */
 			smp_mb__before_atomic();
+
+			if (!(q->flags & TCQ_F_NOLOCK)) {
+				root_lock = qdisc_lock(q);
+				spin_lock(root_lock);
+			} else if (unlikely(test_bit(__QDISC_STATE_DEACTIVATED,
+						     &q->state))) {
+				/* There is a synchronize_net() between
+				 * STATE_DEACTIVATED flag being set and
+				 * qdisc_reset()/some_qdisc_is_busy() in
+				 * dev_deactivate(), so we can safely bail out
+				 * early here to avoid data race between
+				 * qdisc_deactivate() and some_qdisc_is_busy()
+				 * for lockless qdisc.
+				 */
+				clear_bit(__QDISC_STATE_SCHED, &q->state);
+				continue;
+			}
+
 			clear_bit(__QDISC_STATE_SCHED, &q->state);
 			qdisc_run(q);
 			if (root_lock)
 				spin_unlock(root_lock);
 		}
+
+		rcu_read_unlock();
 	}
 
 	xfrm_dev_backlog(sd);
@@ -4692,11 +4691,6 @@ void netdev_rx_handler_unregister(struct net_device *dev)
 }
 EXPORT_SYMBOL_GPL(netdev_rx_handler_unregister);
 
-#ifdef CONFIG_SHORTCUT_FE
-int (*athrs_fast_nat_recv)(struct sk_buff *skb) __rcu __read_mostly;
-EXPORT_SYMBOL_GPL(athrs_fast_nat_recv);
-#endif
-
 /*
  * Limit the use of PFMEMALLOC reserves to those protocols that implement
  * the special handling of PFMEMALLOC skbs.
@@ -4747,10 +4741,6 @@ static int __netif_receive_skb_core(struct sk_buff **pskb, bool pfmemalloc,
 	int ret = NET_RX_DROP;
 	__be16 type;
 
-#ifdef CONFIG_SHORTCUT_FE
-	int (*fast_recv)(struct sk_buff *skb);
-#endif
-
 	net_timestamp_check(!netdev_tstamp_prequeue, skb);
 
 	trace_netif_receive_skb(skb);
@@ -4789,16 +4779,6 @@ another_round:
 		if (unlikely(!skb))
 			goto out;
 	}
-
-#ifdef CONFIG_SHORTCUT_FE
-	fast_recv = rcu_dereference(athrs_fast_nat_recv);
-	if (fast_recv) {
-		if (fast_recv(skb)) {
-			ret = NET_RX_SUCCESS;
-			goto out;
-		}
-	}
-#endif
 
 	if (skb_skip_tc_classify(skb))
 		goto skip_classify;
@@ -5510,9 +5490,6 @@ static enum gro_result dev_gro_receive(struct napi_struct *napi, struct sk_buff 
 	int same_flow;
 	int grow;
 
-	if (skb->gro_skip)
-		goto normal;
-
 	if (netif_elide_gro(skb->dev))
 		goto normal;
 
@@ -5952,11 +5929,6 @@ void __napi_schedule(struct napi_struct *n)
 {
 	unsigned long flags;
 
-	if (test_bit(NAPI_STATE_THREADED, &n->state)) {
-		queue_work(napi_workq, &n->work);
-		return;
-	}
-
 	local_irq_save(flags);
 	____napi_schedule(this_cpu_ptr(&softnet_data), n);
 	local_irq_restore(flags);
@@ -6004,11 +5976,6 @@ EXPORT_SYMBOL(napi_schedule_prep);
  */
 void __napi_schedule_irqoff(struct napi_struct *n)
 {
-	if (test_bit(NAPI_STATE_THREADED, &n->state)) {
-		queue_work(napi_workq, &n->work);
-		return;
-	}
-
 	____napi_schedule(this_cpu_ptr(&softnet_data), n);
 }
 EXPORT_SYMBOL(__napi_schedule_irqoff);
@@ -6270,89 +6237,9 @@ static void init_gro_hash(struct napi_struct *napi)
 	napi->gro_bitmask = 0;
 }
 
-static int __napi_poll(struct napi_struct *n, bool *repoll)
-{
-	int work, weight;
-
-	weight = n->weight;
-
-	/* This NAPI_STATE_SCHED test is for avoiding a race
-	 * with netpoll's poll_napi().  Only the entity which
-	 * obtains the lock and sees NAPI_STATE_SCHED set will
-	 * actually make the ->poll() call.  Therefore we avoid
-	 * accidentally calling ->poll() when NAPI is not scheduled.
-	 */
-	work = 0;
-	if (test_bit(NAPI_STATE_SCHED, &n->state)) {
-		work = n->poll(n, weight);
-		trace_napi_poll(n, work, weight);
-	}
-
-	WARN_ON_ONCE(work > weight);
-
-	if (likely(work < weight))
-		return work;
-
-	/* Drivers must not modify the NAPI state if they
-	 * consume the entire weight.  In such cases this code
-	 * still "owns" the NAPI instance and therefore can
-	 * move the instance around on the list at-will.
-	 */
-	if (unlikely(napi_disable_pending(n))) {
-		napi_complete(n);
-		return work;
-	}
-
-	if (n->gro_bitmask) {
-		/* flush too old packets
-		 * If HZ < 1000, flush all packets.
-		 */
-		napi_gro_flush(n, HZ >= 1000);
-	}
-
-	gro_normal_list(n);
-
-	*repoll = true;
-
-	return work;
-}
-
-static void napi_workfn(struct work_struct *work)
-{
-	struct napi_struct *n = container_of(work, struct napi_struct, work);
-	void *have;
-
-	for (;;) {
-		bool repoll = false;
-
-		local_bh_disable();
-
-		have = netpoll_poll_lock(n);
-		__napi_poll(n, &repoll);
-		netpoll_poll_unlock(have);
-
-		local_bh_enable();
-
-		if (!repoll)
-			return;
-
-		if (!need_resched())
-			continue;
-
-		/*
-		 * have to pay for the latency of task switch even if
-		 * napi is scheduled
-		 */
-		queue_work(napi_workq, work);
-		return;
-	}
-}
-
 void netif_napi_add(struct net_device *dev, struct napi_struct *napi,
 		    int (*poll)(struct napi_struct *, int), int weight)
 {
-	if (dev->threaded)
-		set_bit(NAPI_STATE_THREADED, &napi->state);
 	INIT_LIST_HEAD(&napi->poll_list);
 	hrtimer_init(&napi->timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL_PINNED);
 	napi->timer.function = napi_watchdog;
@@ -6369,7 +6256,6 @@ void netif_napi_add(struct net_device *dev, struct napi_struct *napi,
 #ifdef CONFIG_NETPOLL
 	napi->poll_owner = -1;
 #endif
-	INIT_WORK(&napi->work, napi_workfn);
 	set_bit(NAPI_STATE_SCHED, &napi->state);
 	set_bit(NAPI_STATE_NPSVC, &napi->state);
 	list_add_rcu(&napi->dev_list, &dev->napi_list);
@@ -6410,7 +6296,6 @@ static void flush_gro_hash(struct napi_struct *napi)
 void netif_napi_del(struct napi_struct *napi)
 {
 	might_sleep();
-	cancel_work_sync(&napi->work);
 	if (napi_hash_del(napi))
 		synchronize_net();
 	list_del_init(&napi->dev_list);
@@ -6423,18 +6308,50 @@ EXPORT_SYMBOL(netif_napi_del);
 
 static int napi_poll(struct napi_struct *n, struct list_head *repoll)
 {
-	bool do_repoll = false;
 	void *have;
-	int work;
+	int work, weight;
 
 	list_del_init(&n->poll_list);
 
 	have = netpoll_poll_lock(n);
 
-	work = __napi_poll(n, &do_repoll);
+	weight = n->weight;
 
-	if (!do_repoll)
+	/* This NAPI_STATE_SCHED test is for avoiding a race
+	 * with netpoll's poll_napi().  Only the entity which
+	 * obtains the lock and sees NAPI_STATE_SCHED set will
+	 * actually make the ->poll() call.  Therefore we avoid
+	 * accidentally calling ->poll() when NAPI is not scheduled.
+	 */
+	work = 0;
+	if (test_bit(NAPI_STATE_SCHED, &n->state)) {
+		work = n->poll(n, weight);
+		trace_napi_poll(n, work, weight);
+	}
+
+	WARN_ON_ONCE(work > weight);
+
+	if (likely(work < weight))
 		goto out_unlock;
+
+	/* Drivers must not modify the NAPI state if they
+	 * consume the entire weight.  In such cases this code
+	 * still "owns" the NAPI instance and therefore can
+	 * move the instance around on the list at-will.
+	 */
+	if (unlikely(napi_disable_pending(n))) {
+		napi_complete(n);
+		goto out_unlock;
+	}
+
+	if (n->gro_bitmask) {
+		/* flush too old packets
+		 * If HZ < 1000, flush all packets.
+		 */
+		napi_gro_flush(n, HZ >= 1000);
+	}
+
+	gro_normal_list(n);
 
 	/* Some drivers may have called napi_schedule
 	 * prior to exhausting their budget.
@@ -7368,48 +7285,6 @@ static void __netdev_adjacent_dev_unlink_neighbour(struct net_device *dev,
 					   &upper_dev->adj_list.lower);
 }
 
-static void __netdev_addr_mask(unsigned char *mask, const unsigned char *addr,
-			       struct net_device *dev)
-{
-	int i;
-
-	for (i = 0; i < dev->addr_len; i++)
-		mask[i] |= addr[i] ^ dev->dev_addr[i];
-}
-
-static void __netdev_upper_mask(unsigned char *mask, struct net_device *dev,
-				struct net_device *lower)
-{
-	struct net_device *cur;
-	struct list_head *iter;
-
-	netdev_for_each_upper_dev_rcu(dev, cur, iter) {
-		__netdev_addr_mask(mask, cur->dev_addr, lower);
-		__netdev_upper_mask(mask, cur, lower);
-	}
-}
-
-static void __netdev_update_addr_mask(struct net_device *dev)
-{
-	unsigned char mask[MAX_ADDR_LEN];
-	struct net_device *cur;
-	struct list_head *iter;
-
-	memset(mask, 0, sizeof(mask));
-	__netdev_upper_mask(mask, dev, dev);
-	memcpy(dev->local_addr_mask, mask, dev->addr_len);
-
-	netdev_for_each_lower_dev(dev, cur, iter)
-		__netdev_update_addr_mask(cur);
-}
-
-static void netdev_update_addr_mask(struct net_device *dev)
-{
-	rcu_read_lock();
-	__netdev_update_addr_mask(dev);
-	rcu_read_unlock();
-}
-
 static int __netdev_upper_dev_link(struct net_device *dev,
 				   struct net_device *upper_dev, bool master,
 				   void *upper_priv, void *upper_info,
@@ -7460,7 +7335,6 @@ static int __netdev_upper_dev_link(struct net_device *dev,
 	if (ret)
 		return ret;
 
-	netdev_update_addr_mask(dev);
 	ret = call_netdevice_notifiers_info(NETDEV_CHANGEUPPER,
 					    &changeupper_info.info);
 	ret = notifier_to_errno(ret);
@@ -7554,7 +7428,6 @@ void netdev_upper_dev_unlink(struct net_device *dev,
 
 	__netdev_adjacent_dev_unlink_neighbour(dev, upper_dev);
 
-	netdev_update_addr_mask(dev);
 	call_netdevice_notifiers_info(NETDEV_CHANGEUPPER,
 				      &changeupper_info.info);
 
@@ -8285,7 +8158,6 @@ int dev_set_mac_address(struct net_device *dev, struct sockaddr *sa,
 	if (err)
 		return err;
 	dev->addr_assign_type = NET_ADDR_SET;
-	netdev_update_addr_mask(dev);
 	call_netdevice_notifiers(NETDEV_CHANGEADDR, dev);
 	add_device_randomness(dev->dev_addr, dev->addr_len);
 	return 0;
@@ -10413,10 +10285,6 @@ static int __init net_dev_init(void)
 		sd->backlog.poll = process_backlog;
 		sd->backlog.weight = weight_p;
 	}
-
-	napi_workq = alloc_workqueue("napi_workq", WQ_UNBOUND | WQ_HIGHPRI,
-				     WQ_UNBOUND_MAX_ACTIVE | WQ_SYSFS);
-	BUG_ON(!napi_workq);
 
 	dev_boot_phase = 0;
 

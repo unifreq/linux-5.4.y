@@ -19,10 +19,6 @@
 #include <linux/if_bridge.h>
 #include <linux/netpoll.h>
 #include <linux/ptp_classify.h>
-#if IS_ENABLED(CONFIG_NF_FLOW_TABLE)
-#include <linux/netfilter.h>
-#include <net/netfilter/nf_flow_table.h>
-#endif
 
 #include "dsa_priv.h"
 
@@ -696,13 +692,15 @@ static int dsa_slave_get_sset_count(struct net_device *dev, int sset)
 	struct dsa_switch *ds = dp->ds;
 
 	if (sset == ETH_SS_STATS) {
-		int count;
+		int count = 0;
 
-		count = 4;
-		if (ds->ops->get_sset_count)
-			count += ds->ops->get_sset_count(ds, dp->index, sset);
+		if (ds->ops->get_sset_count) {
+			count = ds->ops->get_sset_count(ds, dp->index, sset);
+			if (count < 0)
+				return count;
+		}
 
-		return count;
+		return count + 4;
 	}
 
 	return -EOPNOTSUPP;
@@ -1225,27 +1223,6 @@ static struct devlink_port *dsa_slave_get_devlink_port(struct net_device *dev)
 	return dp->ds->devlink ? &dp->devlink_port : NULL;
 }
 
-#if IS_ENABLED(CONFIG_NF_FLOW_TABLE)
-static int dsa_flow_offload_check(struct flow_offload_hw_path *path)
-{
-	struct net_device *dev = path->dev;
-	struct dsa_port *dp;
-
-	if (!(path->flags & FLOW_OFFLOAD_PATH_ETHERNET))
-		return -EINVAL;
-
-	dp = dsa_slave_to_port(dev);
-	path->dsa_port = dp->index;
-	path->dev = dsa_slave_to_master(dev);
-	path->flags |= FLOW_OFFLOAD_PATH_DSA;
-
-	if (path->dev->netdev_ops->ndo_flow_offload_check)
-		return path->dev->netdev_ops->ndo_flow_offload_check(path);
-
-	return 0;
-}
-#endif /* CONFIG_NF_FLOW_TABLE */
-
 static const struct net_device_ops dsa_slave_netdev_ops = {
 	.ndo_open	 	= dsa_slave_open,
 	.ndo_stop		= dsa_slave_close,
@@ -1270,9 +1247,6 @@ static const struct net_device_ops dsa_slave_netdev_ops = {
 	.ndo_vlan_rx_add_vid	= dsa_slave_vlan_rx_add_vid,
 	.ndo_vlan_rx_kill_vid	= dsa_slave_vlan_rx_kill_vid,
 	.ndo_get_devlink_port	= dsa_slave_get_devlink_port,
-#if IS_ENABLED(CONFIG_NF_FLOW_TABLE)
-	.ndo_flow_offload_check	 = dsa_flow_offload_check,
-#endif
 };
 
 static struct device_type dsa_type = {
