@@ -80,7 +80,7 @@
 
 		opp-1908000000 {
 			opp-hz = /bits/ 64 <1908000000>;
-			opp-microvolt = <981000>;
+			opp-microvolt = <1011000>;
 		};
 
 		opp-2016000000 {
@@ -152,7 +152,7 @@
 
 		opp-1908000000 {
 			opp-hz = /bits/ 64 <1908000000>;
-			opp-microvolt = <991000>;
+			opp-microvolt = <1011000>;
 		};
 
 		opp-2016000000 {

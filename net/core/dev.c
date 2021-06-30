@@ -3200,7 +3200,6 @@ static int xmit_one(struct sk_buff *skb, struct net_device *dev,
 #ifdef CONFIG_SHORTCUT_FE
 	}
 #endif
-
 #ifdef CONFIG_ETHERNET_PACKET_MANGLE
 	if (!dev->eth_mangle_tx ||
 	    (skb = dev->eth_mangle_tx(dev, skb)) != NULL)
