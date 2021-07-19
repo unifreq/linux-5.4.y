@@ -156,6 +156,7 @@ static DEFINE_SPINLOCK(offload_lock);
 struct list_head ptype_base[PTYPE_HASH_SIZE] __read_mostly;
 struct list_head ptype_all __read_mostly;	/* Taps */
 static struct list_head offload_base __read_mostly;
+static struct workqueue_struct *napi_workq __read_mostly;
 
 static int netif_rx_internal(struct sk_buff *skb);
 static int call_netdevice_notifiers_info(unsigned long val,
@@ -5969,6 +5970,11 @@ void __napi_schedule(struct napi_struct *n)
 {
 	unsigned long flags;
 
+	if (test_bit(NAPI_STATE_THREADED, &n->state)) {
+		queue_work(napi_workq, &n->work);
+		return;
+	}
+
 	local_irq_save(flags);
 	____napi_schedule(this_cpu_ptr(&softnet_data), n);
 	local_irq_restore(flags);
@@ -6020,6 +6026,11 @@ EXPORT_SYMBOL(napi_schedule_prep);
  */
 void __napi_schedule_irqoff(struct napi_struct *n)
 {
+	if (test_bit(NAPI_STATE_THREADED, &n->state)) {
+		queue_work(napi_workq, &n->work);
+		return;
+	}
+
 	if (!IS_ENABLED(CONFIG_PREEMPT_RT))
 		____napi_schedule(this_cpu_ptr(&softnet_data), n);
 	else
@@ -6284,9 +6295,89 @@ static void init_gro_hash(struct napi_struct *napi)
 	napi->gro_bitmask = 0;
 }
 
+static int __napi_poll(struct napi_struct *n, bool *repoll)
+{
+	int work, weight;
+
+	weight = n->weight;
+
+	/* This NAPI_STATE_SCHED test is for avoiding a race
+	 * with netpoll's poll_napi().  Only the entity which
+	 * obtains the lock and sees NAPI_STATE_SCHED set will
+	 * actually make the ->poll() call.  Therefore we avoid
+	 * accidentally calling ->poll() when NAPI is not scheduled.
+	 */
+	work = 0;
+	if (test_bit(NAPI_STATE_SCHED, &n->state)) {
+		work = n->poll(n, weight);
+		trace_napi_poll(n, work, weight);
+	}
+
+	WARN_ON_ONCE(work > weight);
+
+	if (likely(work < weight))
+		return work;
+
+	/* Drivers must not modify the NAPI state if they
+	 * consume the entire weight.  In such cases this code
+	 * still "owns" the NAPI instance and therefore can
+	 * move the instance around on the list at-will.
+	 */
+	if (unlikely(napi_disable_pending(n))) {
+		napi_complete(n);
+		return work;
+	}
+
+	if (n->gro_bitmask) {
+		/* flush too old packets
+		 * If HZ < 1000, flush all packets.
+		 */
+		napi_gro_flush(n, HZ >= 1000);
+	}
+
+	gro_normal_list(n);
+
+	*repoll = true;
+
+	return work;
+}
+
+static void napi_workfn(struct work_struct *work)
+{
+	struct napi_struct *n = container_of(work, struct napi_struct, work);
+	void *have;
+
+	for (;;) {
+		bool repoll = false;
+
+		local_bh_disable();
+
+		have = netpoll_poll_lock(n);
+		__napi_poll(n, &repoll);
+		netpoll_poll_unlock(have);
+
+		local_bh_enable();
+
+		if (!repoll)
+			return;
+
+		if (!need_resched())
+			continue;
+
+		/*
+		 * have to pay for the latency of task switch even if
+		 * napi is scheduled
+		 */
+		queue_work(napi_workq, work);
+		return;
+	}
+}
+
 void netif_napi_add(struct net_device *dev, struct napi_struct *napi,
 		    int (*poll)(struct napi_struct *, int), int weight)
 {
+	if (dev->threaded)
+		set_bit(NAPI_STATE_THREADED, &napi->state);
 	INIT_LIST_HEAD(&napi->poll_list);
 	hrtimer_init(&napi->timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL_PINNED);
 	napi->timer.function = napi_watchdog;
@@ -6303,6 +6394,7 @@ void netif_napi_add(struct net_device *dev, struct napi_struct *napi,
 #ifdef CONFIG_NETPOLL
 	napi->poll_owner = -1;
 #endif
+	INIT_WORK(&napi->work, napi_workfn);
 	set_bit(NAPI_STATE_SCHED, &napi->state);
 	set_bit(NAPI_STATE_NPSVC, &napi->state);
 	list_add_rcu(&napi->dev_list, &dev->napi_list);
@@ -6343,6 +6435,7 @@ static void flush_gro_hash(struct napi_struct *napi)
 void netif_napi_del(struct napi_struct *napi)
 {
 	might_sleep();
+	cancel_work_sync(&napi->work);
 	if (napi_hash_del(napi))
 		synchronize_net();
 	list_del_init(&napi->dev_list);
@@ -6355,50 +6448,18 @@ EXPORT_SYMBOL(netif_napi_del);
 
 static int napi_poll(struct napi_struct *n, struct list_head *repoll)
 {
+	bool do_repoll = false;
 	void *have;
-	int work, weight;
+	int work;
 
 	list_del_init(&n->poll_list);
 
 	have = netpoll_poll_lock(n);
 
-	weight = n->weight;
+	work = __napi_poll(n, &do_repoll);
 
-	/* This NAPI_STATE_SCHED test is for avoiding a race
-	 * with netpoll's poll_napi().  Only the entity which
-	 * obtains the lock and sees NAPI_STATE_SCHED set will
-	 * actually make the ->poll() call.  Therefore we avoid
-	 * accidentally calling ->poll() when NAPI is not scheduled.
-	 */
-	work = 0;
-	if (test_bit(NAPI_STATE_SCHED, &n->state)) {
-		work = n->poll(n, weight);
-		trace_napi_poll(n, work, weight);
-	}
-
-	WARN_ON_ONCE(work > weight);
-
-	if (likely(work < weight))
+	if (!do_repoll)
 		goto out_unlock;
-
-	/* Drivers must not modify the NAPI state if they
-	 * consume the entire weight.  In such cases this code
-	 * still "owns" the NAPI instance and therefore can
-	 * move the instance around on the list at-will.
-	 */
-	if (unlikely(napi_disable_pending(n))) {
-		napi_complete(n);
-		goto out_unlock;
-	}
-
-	if (n->gro_bitmask) {
-		/* flush too old packets
-		 * If HZ < 1000, flush all packets.
-		 */
-		napi_gro_flush(n, HZ >= 1000);
-	}
-
-	gro_normal_list(n);
 
 	/* Some drivers may have called napi_schedule
 	 * prior to exhausting their budget.
@@ -10377,6 +10438,10 @@ static int __init net_dev_init(void)
 		sd->backlog.poll = process_backlog;
 		sd->backlog.weight = weight_p;
 	}
+
+	napi_workq = alloc_workqueue("napi_workq", WQ_UNBOUND | WQ_HIGHPRI,
+				     WQ_UNBOUND_MAX_ACTIVE | WQ_SYSFS);
+	BUG_ON(!napi_workq);
 
 	dev_boot_phase = 0;
 
