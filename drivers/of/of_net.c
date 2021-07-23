@@ -55,6 +55,7 @@ static void *of_get_mac_addr_nvmem(struct device_node *np, int *err)
 	void *mac;
 	u8 nvmem_mac[ETH_ALEN];
 	struct platform_device *pdev = of_find_device_by_node(np);
+	struct property *prop;
 
 	if (!pdev) {
 		*err = -ENODEV;
@@ -72,10 +73,29 @@ static void *of_get_mac_addr_nvmem(struct device_node *np, int *err)
 	put_device(&pdev->dev);
 	if (!mac) {
 		*err = -ENOMEM;
-		return NULL;
+		goto out_err;
+	}
+
+	prop = devm_kzalloc(&pdev->dev, sizeof(*prop), GFP_KERNEL);
+	if (!prop) {
+		*err = -ENOMEM;
+		goto out_err;
+	}
+	prop->name = "mac-address";
+	prop->length = ETH_ALEN;
+	prop->value = devm_kmemdup(&pdev->dev, mac, ETH_ALEN, GFP_KERNEL);
+	if (!prop->value || of_add_property(np, prop)) {
+		*err = -ENOMEM;
+		goto out_err;
 	}
 
 	return mac;
+
+out_err:
+	devm_kfree(&pdev->dev, prop->value);
+	devm_kfree(&pdev->dev, prop);
+	devm_kfree(&pdev->dev, mac);
+	return NULL;
 }
 
 static void *of_get_mac_address_mtd(struct device_node *np)
