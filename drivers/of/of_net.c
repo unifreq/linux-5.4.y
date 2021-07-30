@@ -55,7 +55,6 @@ static void *of_get_mac_addr_nvmem(struct device_node *np, int *err)
 	void *mac;
 	u8 nvmem_mac[ETH_ALEN];
 	struct platform_device *pdev = of_find_device_by_node(np);
-	struct property *prop;
 
 	if (!pdev) {
 		*err = -ENODEV;
@@ -73,36 +72,17 @@ static void *of_get_mac_addr_nvmem(struct device_node *np, int *err)
 	put_device(&pdev->dev);
 	if (!mac) {
 		*err = -ENOMEM;
-		goto out_err;
-	}
-
-	prop = devm_kzalloc(&pdev->dev, sizeof(*prop), GFP_KERNEL);
-	if (!prop) {
-		*err = -ENOMEM;
-		goto out_err;
-	}
-	prop->name = "mac-address";
-	prop->length = ETH_ALEN;
-	prop->value = devm_kmemdup(&pdev->dev, mac, ETH_ALEN, GFP_KERNEL);
-	if (!prop->value || of_add_property(np, prop)) {
-		*err = -ENOMEM;
-		goto out_err;
+		return NULL;
 	}
 
 	return mac;
-
-out_err:
-	devm_kfree(&pdev->dev, prop->value);
-	devm_kfree(&pdev->dev, prop);
-	devm_kfree(&pdev->dev, mac);
-	return NULL;
 }
 
 static void *of_get_mac_address_mtd(struct device_node *np)
 {
 #ifdef CONFIG_MTD
+	struct platform_device *pdev = of_find_device_by_node(np);
 	struct device_node *mtd_np = NULL;
-	struct property *prop;
 	size_t retlen;
 	int size, ret;
 	struct mtd_info *mtd;
@@ -137,30 +117,42 @@ static void *of_get_mac_address_mtd(struct device_node *np)
 	if (!is_valid_ether_addr(mac))
 		return NULL;
 
-	addr = of_get_mac_addr(np, "mac-address");
-	if (addr) {
-		memcpy(addr, mac, ETH_ALEN);
-		return addr;
-	}
+	addr = devm_kmemdup(&pdev->dev, mac, ETH_ALEN, GFP_KERNEL);
+	if (!addr)
+		return ERR_PTR(-ENOMEM);
 
-	prop = kzalloc(sizeof(*prop), GFP_KERNEL);
-	if (!prop)
-		return NULL;
-
-	prop->name = "mac-address";
-	prop->length = ETH_ALEN;
-	prop->value = kmemdup(mac, ETH_ALEN, GFP_KERNEL);
-	if (!prop->value || of_add_property(np, prop))
-		goto free;
-
-	return prop->value;
-free:
-	kfree(prop->value);
-	kfree(prop);
+	return addr;
 #endif
 	return NULL;
 }
 
+static int of_add_mac_address(struct device_node *np, u8* addr)
+{
+	struct property *prop;
+	u8 *np_addr;
+
+	np_addr = of_get_mac_addr(np, "mac-address");
+	if (np_addr) {
+		memcpy(np_addr, addr, ETH_ALEN);
+		return 0;
+	}
+
+	prop = kzalloc(sizeof(*prop), GFP_KERNEL);
+	if (!prop)
+		return 0;
+
+	prop->name = "mac-address";
+	prop->length = ETH_ALEN;
+	prop->value = kmemdup(addr, ETH_ALEN, GFP_KERNEL);
+	if (!prop->value || of_add_property(np, prop))
+		goto free;
+
+	return 0;
+free:
+	kfree(prop->value);
+	kfree(prop);
+	return -ENOMEM;
+}
 
 /**
  * Search the device tree for the best MAC address to use.  'mac-address' is
@@ -184,7 +176,7 @@ free:
  *
  *
  * If a mtd-mac-address property exists, try to fetch the MAC address from the
- * specified mtd device, and store it as a 'mac-address' property
+ * specified mtd device.
  *
  * DT can tell the system to increment the mac-address after is extracted by
  * using:
@@ -234,6 +226,7 @@ found:
 	if (!of_property_read_u32(np, "mac-address-increment", &mac_inc))
 		addr[inc_idx] += mac_inc;
 
+	of_add_mac_address(np, addr);
 	return addr;
 }
 EXPORT_SYMBOL(of_get_mac_address);
