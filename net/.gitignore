@@ -1,0 +1,2 @@
+wireguard/crypto/zinc/chacha20/chacha20-arm64.S
+wireguard/crypto/zinc/poly1305/poly1305-arm64.S
