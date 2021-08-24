@@ -6030,7 +6030,6 @@ void __napi_schedule_irqoff(struct napi_struct *n)
 		queue_work(napi_workq, &n->work);
 		return;
 	}
-
 	if (!IS_ENABLED(CONFIG_PREEMPT_RT))
 		____napi_schedule(this_cpu_ptr(&softnet_data), n);
 	else

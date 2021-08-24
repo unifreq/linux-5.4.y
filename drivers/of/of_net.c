@@ -11,7 +11,6 @@
 #include <linux/phy.h>
 #include <linux/export.h>
 #include <linux/device.h>
-#include <linux/mtd/mtd.h>
 
 /**
  * of_get_phy_mode - Get phy mode for given device_node
@@ -40,7 +39,7 @@ int of_get_phy_mode(struct device_node *np)
 }
 EXPORT_SYMBOL_GPL(of_get_phy_mode);
 
-static void *of_get_mac_addr(struct device_node *np, const char *name)
+static const void *of_get_mac_addr(struct device_node *np, const char *name)
 {
 	struct property *pp = of_find_property(np, name, NULL);
 
@@ -49,109 +48,28 @@ static void *of_get_mac_addr(struct device_node *np, const char *name)
 	return NULL;
 }
 
-static void *of_get_mac_addr_nvmem(struct device_node *np, int *err)
+static const void *of_get_mac_addr_nvmem(struct device_node *np)
 {
 	int ret;
-	void *mac;
+	const void *mac;
 	u8 nvmem_mac[ETH_ALEN];
 	struct platform_device *pdev = of_find_device_by_node(np);
 
-	if (!pdev) {
-		*err = -ENODEV;
-		return NULL;
-	}
+	if (!pdev)
+		return ERR_PTR(-ENODEV);
 
 	ret = nvmem_get_mac_address(&pdev->dev, &nvmem_mac);
 	if (ret) {
 		put_device(&pdev->dev);
-		*err = ret;
-		return NULL;
+		return ERR_PTR(ret);
 	}
 
 	mac = devm_kmemdup(&pdev->dev, nvmem_mac, ETH_ALEN, GFP_KERNEL);
 	put_device(&pdev->dev);
-	if (!mac) {
-		*err = -ENOMEM;
-		return NULL;
-	}
-
-	return mac;
-}
-
-static void *of_get_mac_address_mtd(struct device_node *np)
-{
-#ifdef CONFIG_MTD
-	struct platform_device *pdev = of_find_device_by_node(np);
-	struct device_node *mtd_np = NULL;
-	size_t retlen;
-	int size, ret;
-	struct mtd_info *mtd;
-	const char *part;
-	const __be32 *list;
-	phandle phandle;
-	u8 mac[ETH_ALEN];
-	void *addr;
-
-	list = of_get_property(np, "mtd-mac-address", &size);
-	if (!list || (size != (2 * sizeof(*list))))
-		return NULL;
-
-	phandle = be32_to_cpup(list++);
-	if (phandle)
-		mtd_np = of_find_node_by_phandle(phandle);
-
-	if (!mtd_np)
-		return NULL;
-
-	part = of_get_property(mtd_np, "label", NULL);
-	if (!part)
-		part = mtd_np->name;
-
-	mtd = get_mtd_device_nm(part);
-	if (IS_ERR(mtd))
-		return NULL;
-
-	ret = mtd_read(mtd, be32_to_cpup(list), 6, &retlen, mac);
-	put_mtd_device(mtd);
-
-	if (!is_valid_ether_addr(mac))
-		return NULL;
-
-	addr = devm_kmemdup(&pdev->dev, mac, ETH_ALEN, GFP_KERNEL);
-	if (!addr)
+	if (!mac)
 		return ERR_PTR(-ENOMEM);
 
-	return addr;
-#endif
-	return NULL;
-}
-
-static int of_add_mac_address(struct device_node *np, u8* addr)
-{
-	struct property *prop;
-	u8 *np_addr;
-
-	np_addr = of_get_mac_addr(np, "mac-address");
-	if (np_addr) {
-		memcpy(np_addr, addr, ETH_ALEN);
-		return 0;
-	}
-
-	prop = kzalloc(sizeof(*prop), GFP_KERNEL);
-	if (!prop)
-		return 0;
-
-	prop->name = "mac-address";
-	prop->length = ETH_ALEN;
-	prop->value = kmemdup(addr, ETH_ALEN, GFP_KERNEL);
-	if (!prop->value || of_add_property(np, prop))
-		goto free;
-
-	return 0;
-free:
-	kfree(prop->value);
-	kfree(prop);
-	return -ENOMEM;
+	return mac;
 }
 
 /**
@@ -174,59 +92,24 @@ free:
  * this case, the real MAC is in 'local-mac-address', and 'mac-address' exists
  * but is all zeros.
  *
- *
- * If a mtd-mac-address property exists, try to fetch the MAC address from the
- * specified mtd device.
- *
- * DT can tell the system to increment the mac-address after is extracted by
- * using:
- * - mac-address-increment-byte to decide what byte to increase
- *   (if not defined is increased the last byte)
- * - mac-address-increment to decide how much to increase. The value will
- *   not overflow to other bytes if the increment is over 255.
- *   (example 00:01:02:03:04:ff + 1 == 00:01:02:03:04:00)
- *
  * Return: Will be a valid pointer on success and ERR_PTR in case of error.
 */
 const void *of_get_mac_address(struct device_node *np)
 {
-	u32 inc_idx, mac_inc;
-	int ret = 0;
-	u8 *addr;
-
-	/* Check first if the increment byte is present and valid.
-	 * If not set assume to increment the last byte if found.
-	 */
-	if (of_property_read_u32(np, "mac-address-increment-byte", &inc_idx))
-		inc_idx = 5;
-	if (inc_idx < 3 || inc_idx > 5)
-		return ERR_PTR(-EINVAL);
+	const void *addr;
 
 	addr = of_get_mac_addr(np, "mac-address");
 	if (addr)
-		goto found;
+		return addr;
 
 	addr = of_get_mac_addr(np, "local-mac-address");
 	if (addr)
-		goto found;
+		return addr;
 
 	addr = of_get_mac_addr(np, "address");
 	if (addr)
-		goto found;
+		return addr;
 
-	addr = of_get_mac_address_mtd(np);
-	if (addr)
-		goto found;
-
-	addr = of_get_mac_addr_nvmem(np, &ret);
-	if (ret)
-		return ERR_PTR(ret);
-
-found:
-	if (!of_property_read_u32(np, "mac-address-increment", &mac_inc))
-		addr[inc_idx] += mac_inc;
-
-	of_add_mac_address(np, addr);
-	return addr;
+	return of_get_mac_addr_nvmem(np);
 }
 EXPORT_SYMBOL(of_get_mac_address);
