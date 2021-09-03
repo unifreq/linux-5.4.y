@@ -21,17 +21,11 @@ struct nf_flowtable_type {
 	struct module			*owner;
 };
 
-enum nf_flowtable_flags {
-	NF_FLOWTABLE_F_HW		= 0x1,
-};
-
 struct nf_flowtable {
 	struct list_head		list;
 	struct rhashtable		rhashtable;
 	const struct nf_flowtable_type	*type;
-	u32				flags;
 	struct delayed_work		gc_work;
-	possible_net_t			ft_net;
 };
 
 enum flow_offload_tuple_dir {
@@ -74,34 +68,14 @@ struct flow_offload_tuple_rhash {
 #define FLOW_OFFLOAD_DNAT	0x2
 #define FLOW_OFFLOAD_DYING	0x4
 #define FLOW_OFFLOAD_TEARDOWN	0x8
-#define FLOW_OFFLOAD_HW		0x10
-#define FLOW_OFFLOAD_KEEP	0x20
 
 struct flow_offload {
 	struct flow_offload_tuple_rhash		tuplehash[FLOW_OFFLOAD_DIR_MAX];
 	u32					flags;
-	u32					timeout;
 	union {
 		/* Your private driver data here. */
-		void *priv;
+		u32		timeout;
 	};
-};
-
-#define FLOW_OFFLOAD_PATH_ETHERNET	BIT(0)
-#define FLOW_OFFLOAD_PATH_VLAN		BIT(1)
-#define FLOW_OFFLOAD_PATH_PPPOE		BIT(2)
-#define FLOW_OFFLOAD_PATH_DSA		BIT(3)
-
-struct flow_offload_hw_path {
-	struct net_device *dev;
-	u32 flags;
-
-	u8 eth_src[ETH_ALEN];
-	u8 eth_dest[ETH_ALEN];
-	u16 vlan_proto;
-	u16 vlan_id;
-	u16 pppoe_sid;
-	u16 dsa_port;
 };
 
 #define NF_FLOW_TIMEOUT (30 * HZ)
@@ -130,10 +104,6 @@ static inline void flow_offload_dead(struct flow_offload *flow)
 	flow->flags |= FLOW_OFFLOAD_DYING;
 }
 
-int nf_flow_table_iterate(struct nf_flowtable *flow_table,
-                      void (*iter)(struct flow_offload *flow, void *data),
-                      void *data);
-
 int nf_flow_snat_port(const struct flow_offload *flow,
 		      struct sk_buff *skb, unsigned int thoff,
 		      u8 protocol, enum flow_offload_tuple_dir dir);
@@ -149,24 +119,6 @@ unsigned int nf_flow_offload_ip_hook(void *priv, struct sk_buff *skb,
 				     const struct nf_hook_state *state);
 unsigned int nf_flow_offload_ipv6_hook(void *priv, struct sk_buff *skb,
 				       const struct nf_hook_state *state);
-
-void nf_flow_offload_hw_add(struct net *net, struct flow_offload *flow,
-			    struct nf_conn *ct);
-void nf_flow_offload_hw_del(struct net *net, struct flow_offload *flow);
-
-struct nf_flow_table_hw {
-	struct module	*owner;
-	void		(*add)(struct net *net, struct flow_offload *flow,
-			       struct nf_conn *ct);
-	void		(*del)(struct net *net, struct flow_offload *flow);
-};
-
-int nf_flow_table_hw_register(const struct nf_flow_table_hw *offload);
-void nf_flow_table_hw_unregister(const struct nf_flow_table_hw *offload);
-
-void nf_flow_table_acct(struct flow_offload *flow, struct sk_buff *skb, int dir);
-
-extern struct work_struct nf_flow_offload_hw_work;
 
 #define MODULE_ALIAS_NF_FLOWTABLE(family)	\
 	MODULE_ALIAS("nf-flowtable-" __stringify(family))

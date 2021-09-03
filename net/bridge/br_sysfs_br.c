@@ -166,30 +166,6 @@ static ssize_t group_fwd_mask_store(struct device *d,
 }
 static DEVICE_ATTR_RW(group_fwd_mask);
 
-static ssize_t disable_eap_hack_show(struct device *d,
-				   struct device_attribute *attr,
-				   char *buf)
-{
-	struct net_bridge *br = to_bridge(d);
-	return sprintf(buf, "%u\n", br->disable_eap_hack);
-}
-
-static int set_disable_eap_hack(struct net_bridge *br, unsigned long val)
-{
-	br->disable_eap_hack = !!val;
-
-	return 0;
-}
-
-static ssize_t disable_eap_hack_store(struct device *d,
-				    struct device_attribute *attr,
-				    const char *buf,
-				    size_t len)
-{
-	return store_bridge_parm(d, buf, len, set_disable_eap_hack);
-}
-static DEVICE_ATTR_RW(disable_eap_hack);
-
 static ssize_t priority_show(struct device *d, struct device_attribute *attr,
 			     char *buf)
 {
@@ -875,7 +851,6 @@ static struct attribute *bridge_attrs[] = {
 	&dev_attr_ageing_time.attr,
 	&dev_attr_stp_state.attr,
 	&dev_attr_group_fwd_mask.attr,
-	&dev_attr_disable_eap_hack.attr,
 	&dev_attr_priority.attr,
 	&dev_attr_bridge_id.attr,
 	&dev_attr_root_id.attr,
