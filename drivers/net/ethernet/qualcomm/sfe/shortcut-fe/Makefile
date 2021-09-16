@@ -18,3 +18,5 @@ shortcut-fe-ipv6-objs := \
 endif
 shortcut-fe-cm-objs := \
         sfe_cm.o
+
+ccflags-y += -Werror -Wall
