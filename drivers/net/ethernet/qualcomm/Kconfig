@@ -73,6 +73,10 @@ config SFE_SUPPORT_IPV6
 	bool "Shortcut Forwarding Engine support IPV6"
 	default y
 
+config SFE_ECM
+	bool "SFE_ECM"
+	default y
+
 config FAST_CLASSIFIER
 	bool "Fast Classifier"
 	default y
