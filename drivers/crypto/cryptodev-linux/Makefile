@@ -6,7 +6,7 @@
 CRYPTODEV_CFLAGS ?= #-DENABLE_ASYNC
 KBUILD_CFLAGS += -I$(src) $(CRYPTODEV_CFLAGS) -Wvla
 KERNEL_DIR ?= /lib/modules/$(shell uname -r)/build
-VERSION = 1.11
+VERSION = 1.12
 
 prefix ?= /usr/local
 includedir = $(prefix)/include
@@ -22,6 +22,9 @@ endif
 ifneq ($(CROSS_COMPILE),)
 KERNEL_MAKE_OPTS += CROSS_COMPILE=$(CROSS_COMPILE)
 endif
+ifneq ($(INSTALL_MOD_PATH),)
+KERNEL_MAKE_OPTS += INSTALL_MOD_PATH=$(INSTALL_MOD_PATH)
+endif
 
 build: version.h
 	$(MAKE) $(KERNEL_MAKE_OPTS) modules
@@ -35,13 +38,20 @@ modules_install:
 	$(MAKE) $(KERNEL_MAKE_OPTS) modules_install
 	install -m 644 -D crypto/cryptodev.h $(DESTDIR)/$(includedir)/crypto/cryptodev.h
 
+install_tests: tests
+	$(MAKE) -C tests install DESTDIR=$(PREFIX)
+
 clean:
 	$(MAKE) $(KERNEL_MAKE_OPTS) clean
-	rm -f $(hostprogs) *~
 	CFLAGS=$(CRYPTODEV_CFLAGS) KERNEL_DIR=$(KERNEL_DIR) $(MAKE) -C tests clean
 
 check:
 	CFLAGS=$(CRYPTODEV_CFLAGS) KERNEL_DIR=$(KERNEL_DIR) $(MAKE) -C tests check
+
+tests:
+	KERNEL_DIR=$(KERNEL_DIR) $(MAKE) -C tests
+
+.PHONY: install modules_install tests install_tests
 
 CPOPTS =
 ifneq ($(SHOW_TYPES),)
