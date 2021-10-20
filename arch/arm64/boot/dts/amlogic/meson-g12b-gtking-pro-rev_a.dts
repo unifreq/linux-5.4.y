@@ -1,0 +1,42 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * Author: unifreq <uniqfreq@gmail.com>
+ */
+
+/dts-v1/;
+
+#include "meson-g12b-gtking.dts"
+
+/ {
+	model = "Beelink GT-King Pro";
+   	gpio-keys-polled {
+	       compatible = "gpio-keys-polled";
+	       #address-cells = <1>;
+	       #size-cells = <0>;
+	       poll-interval = <100>;
+
+	       power-button {
+		       label = "power";
+		       linux,code = <KEY_POWER>;
+		       gpios = <&gpio_ao GPIOAO_3 GPIO_ACTIVE_HIGH>;
+	       };
+       };
+
+       leds {
+	       compatible = "gpio-leds";
+
+	       led-white {
+		       label = "power:white";
+		       gpios = <&gpio_ao GPIOAO_11 GPIO_ACTIVE_HIGH>;
+		       default-state = "on";
+	       };
+	};
+};
+
+&usb1_pow {
+	gpio = <&gpio GPIOH_5 GPIO_ACTIVE_HIGH>;
+};
+
+&usb_pwr_en {
+	gpio = <&gpio GPIOH_6 GPIO_ACTIVE_HIGH>;
+};
