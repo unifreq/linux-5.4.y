@@ -6,11 +6,41 @@
 
 /dts-v1/;
 
+/* 
+ *  The Beelink GT-King Pro Rev A(HW Version: SA9H) is not base on w400 board, 
+ *  but it is closer to the circuit design of Hardkernel ODroid N2
+ */
+
 #include "meson-g12b-odroid-n2.dts"
 
 / {
 	compatible = "azw,gtking", "amlogic,s922x", "amlogic,g12b";
 	model = "Beelink GT-King Pro (Rev A)";
+
+	gpio-keys-polled {
+		compatible = "gpio-keys-polled";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		poll-interval = <100>;
+
+		power-button {
+			label = "power";
+			linux,code = <KEY_POWER>;
+			/* Just for test, because i don't konwn the turely GPIO of the REV A board */
+			gpios = <&gpio_ao GPIOAO_3 GPIO_ACTIVE_HIGH>;
+		};
+	};
+
+	leds {
+		compatible = "gpio-leds";
+
+		/delete-node/ led-blue;
+		led-white {
+			label = "power:white";
+			gpios = <&gpio_ao GPIOAO_11 GPIO_ACTIVE_HIGH>;
+			default-state = "on";
+		};
+	};
 
 	sound {
 		model = "GTKINGPRO";
@@ -31,6 +61,20 @@
 		clock-frequency = <32768>;
 		pwms = <&pwm_ef 0 30518 0>; /* PWM_E at 32.768KHz */
 	};
+
+        vddgpu: regulator-vddgpu {
+                compatible = "regulator-fixed";
+                regulator-name = "mali";
+                regulator-min-microvolt = <800000>;
+                regulator-max-microvolt = <800000>;
+                vin-supply = <&vcc_5v>;
+                regulator-boot-on;
+                regulator-always-on;
+        };
+};
+
+&mali {
+        mali-supply=<&vddgpu>;
 };
 
 &pwm_ef {
