@@ -192,8 +192,3 @@
 	rx-fifo-depth = <4096>;
 	tx-fifo-depth = <4096>;
 };
-
-&cpu_opp_table_0 {
-	/delete-node/ opp-1896000000;
-	/delete-node/ opp-1992000000;
-};
