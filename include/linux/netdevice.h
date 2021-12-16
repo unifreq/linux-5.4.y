@@ -138,8 +138,8 @@ static inline bool dev_xmit_complete(int rc)
 
 #if defined(CONFIG_HYPERV_NET)
 # define LL_MAX_HEADER 128
-#elif defined(CONFIG_WLAN) || IS_ENABLED(CONFIG_AX25) || 1
-# if defined(CONFIG_MAC80211_MESH) || 1
+#elif defined(CONFIG_WLAN) || IS_ENABLED(CONFIG_AX25)
+# if defined(CONFIG_MAC80211_MESH)
 #  define LL_MAX_HEADER 128
 # else
 #  define LL_MAX_HEADER 96
@@ -340,7 +340,6 @@ struct napi_struct {
 	struct list_head	dev_list;
 	struct hlist_node	napi_hash_node;
 	unsigned int		napi_id;
-	struct work_struct	work;
 };
 
 enum {
@@ -351,7 +350,6 @@ enum {
 	NAPI_STATE_HASHED,	/* In NAPI hash (busy polling possible) */
 	NAPI_STATE_NO_BUSY_POLL,/* Do not add in napi_hash, no busy polling */
 	NAPI_STATE_IN_BUSY_POLL,/* sk_busy_loop() owns this NAPI */
-	NAPI_STATE_THREADED,	/* Use threaded NAPI */
 };
 
 enum {
@@ -362,7 +360,6 @@ enum {
 	NAPIF_STATE_HASHED	 = BIT(NAPI_STATE_HASHED),
 	NAPIF_STATE_NO_BUSY_POLL = BIT(NAPI_STATE_NO_BUSY_POLL),
 	NAPIF_STATE_IN_BUSY_POLL = BIT(NAPI_STATE_IN_BUSY_POLL),
-	NAPIF_STATE_THREADED	 = BIT(NAPI_STATE_THREADED),
 };
 
 enum gro_result {
@@ -931,14 +928,6 @@ struct devlink;
 struct tlsdev_ops;
 
 
-struct flow_offload;
-struct flow_offload_hw_path;
-
-enum flow_offload_type {
-	FLOW_OFFLOAD_ADD	= 0,
-	FLOW_OFFLOAD_DEL,
-};
-
 /*
  * This structure defines the management hooks for network devices.
  * The following hooks can be defined; unless noted otherwise, they are
@@ -1170,17 +1159,6 @@ enum flow_offload_type {
  *			     int nlflags)
  * int (*ndo_bridge_dellink)(struct net_device *dev, struct nlmsghdr *nlh,
  *			     u16 flags);
- *
- * int (*ndo_flow_offload_check)(struct flow_offload_hw_path *path);
- *	For virtual devices like bridges, vlan, and pppoe, fill in the
- *	underlying network device that can be used for offloading connections.
- *	Return an error if offloading is not supported.
- *
- * int (*ndo_flow_offload)(enum flow_offload_type type,
- *			   struct flow_offload *flow,
- *			   struct flow_offload_hw_path *src,
- *			   struct flow_offload_hw_path *dest);
- *	Adds/deletes flow entry to/from net device flowtable.
  *
  * int (*ndo_change_carrier)(struct net_device *dev, bool new_carrier);
  *	Called to change device carrier. Soft-devices (like dummy, team, etc)
@@ -1429,11 +1407,6 @@ struct net_device_ops {
 	int			(*ndo_bridge_dellink)(struct net_device *dev,
 						      struct nlmsghdr *nlh,
 						      u16 flags);
-	int			(*ndo_flow_offload_check)(struct flow_offload_hw_path *path);
-	int			(*ndo_flow_offload)(enum flow_offload_type type,
-						    struct flow_offload *flow,
-						    struct flow_offload_hw_path *src,
-						    struct flow_offload_hw_path *dest);
 	int			(*ndo_change_carrier)(struct net_device *dev,
 						      bool new_carrier);
 	int			(*ndo_get_phys_port_id)(struct net_device *dev,
@@ -1549,7 +1522,6 @@ enum netdev_priv_flags {
 	IFF_FAILOVER_SLAVE		= 1<<28,
 	IFF_L3MDEV_RX_HANDLER		= 1<<29,
 	IFF_LIVE_RENAME_OK		= 1<<30,
-	IFF_NO_IP_ALIGN			= 1<<31,
 };
 
 #define IFF_802_1Q_VLAN			IFF_802_1Q_VLAN
@@ -1582,7 +1554,6 @@ enum netdev_priv_flags {
 #define IFF_FAILOVER_SLAVE		IFF_FAILOVER_SLAVE
 #define IFF_L3MDEV_RX_HANDLER		IFF_L3MDEV_RX_HANDLER
 #define IFF_LIVE_RENAME_OK		IFF_LIVE_RENAME_OK
-#define IFF_NO_IP_ALIGN			IFF_NO_IP_ALIGN
 
 /* Specifies the type of the struct net_device::ml_priv pointer */
 enum netdev_ml_priv_type {
@@ -1891,11 +1862,6 @@ struct net_device {
 	const struct tlsdev_ops *tlsdev_ops;
 #endif
 
-#ifdef CONFIG_ETHERNET_PACKET_MANGLE
-	void (*eth_mangle_rx)(struct net_device *dev, struct sk_buff *skb);
-	struct sk_buff *(*eth_mangle_tx)(struct net_device *dev, struct sk_buff *skb);
-#endif
-
 	const struct header_ops *header_ops;
 
 	unsigned int		flags;
@@ -1941,8 +1907,6 @@ struct net_device {
 	struct netdev_hw_addr_list	mc;
 	struct netdev_hw_addr_list	dev_addrs;
 
-	unsigned char		local_addr_mask[MAX_ADDR_LEN];
-
 #ifdef CONFIG_SYSFS
 	struct kset		*queues_kset;
 #endif
@@ -1976,10 +1940,6 @@ struct net_device {
 	struct wpan_dev		*ieee802154_ptr;
 #if IS_ENABLED(CONFIG_MPLS_ROUTING)
 	struct mpls_dev __rcu	*mpls_ptr;
-#endif
-
-#ifdef CONFIG_ETHERNET_PACKET_MANGLE
-	void			*phy_ptr; /* PHY device specific data */
 #endif
 
 /*
@@ -2115,7 +2075,6 @@ struct net_device {
 	struct lock_class_key	addr_list_lock_key;
 	bool			proto_down;
 	unsigned		wol_enabled:1;
-	unsigned		threaded:1;
 };
 #define to_net_dev(d) container_of(d, struct net_device, dev)
 
@@ -2294,26 +2253,6 @@ static inline void *netdev_priv(const struct net_device *dev)
  */
 void netif_napi_add(struct net_device *dev, struct napi_struct *napi,
 		    int (*poll)(struct napi_struct *, int), int weight);
-
-/**
- *	netif_threaded_napi_add - initialize a NAPI context
- *	@dev:  network device
- *	@napi: NAPI context
- *	@poll: polling function
- *	@weight: default weight
- *
- * This variant of netif_napi_add() should be used from drivers using NAPI
- * with CPU intensive poll functions.
- * This will schedule polling from a high priority workqueue
- */
-static inline void netif_threaded_napi_add(struct net_device *dev,
-					   struct napi_struct *napi,
-					   int (*poll)(struct napi_struct *, int),
-					   int weight)
-{
-	set_bit(NAPI_STATE_THREADED, &napi->state);
-	netif_napi_add(dev, napi, poll, weight);
-}
 
 /**
  *	netif_tx_napi_add - initialize a NAPI context

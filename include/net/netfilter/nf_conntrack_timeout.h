@@ -124,6 +124,4 @@ extern struct nf_ct_timeout *(*nf_ct_timeout_find_get_hook)(struct net *net, con
 extern void (*nf_ct_timeout_put_hook)(struct nf_ct_timeout *timeout);
 #endif
 
-extern unsigned int *udp_get_timeouts(struct net *net);
-
 #endif /* _NF_CONNTRACK_TIMEOUT_H */

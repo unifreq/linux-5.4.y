@@ -26,12 +26,6 @@ menuconfig NET
 
 if NET
 
-config ETHERNET_PACKET_MANGLE
-	bool
-	help
-	  This option can be selected by phy drivers that need to mangle
-	  packets going in or out of an ethernet device.
-
 config WANT_COMPAT_NETLINK_MESSAGES
 	bool
 	help
@@ -471,6 +465,3 @@ config HAVE_CBPF_JIT
 # Extended BPF JIT (eBPF)
 config HAVE_EBPF_JIT
 	bool
-
-config SHORTCUT_FE
-	bool "Enables kernel network stack path for Shortcut  Forwarding Engine"
