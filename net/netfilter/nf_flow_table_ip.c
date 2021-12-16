@@ -12,6 +12,7 @@
 #include <net/ip6_route.h>
 #include <net/neighbour.h>
 #include <net/netfilter/nf_flow_table.h>
+
 /* For layer 4 checksum field offset. */
 #include <linux/tcp.h>
 #include <linux/udp.h>
@@ -296,6 +297,7 @@ nf_flow_offload_ip_hook(void *priv, struct sk_buff *skb,
 	skb->dev = outdev;
 	nexthop = rt_nexthop(rt, flow->tuplehash[!dir].tuple.src_v4.s_addr);
 	skb_dst_set_noref(skb, &rt->dst);
+	nf_flow_table_acct(flow, skb, dir);
 	neigh_xmit(NEIGH_ARP_TABLE, outdev, &nexthop, skb);
 
 	return NF_STOLEN;
@@ -526,6 +528,7 @@ nf_flow_offload_ipv6_hook(void *priv, struct sk_buff *skb,
 	skb->dev = outdev;
 	nexthop = rt6_nexthop(rt, &flow->tuplehash[!dir].tuple.src_v6);
 	skb_dst_set_noref(skb, &rt->dst);
+	nf_flow_table_acct(flow, skb, dir);
 	neigh_xmit(NEIGH_ND_TABLE, outdev, nexthop, skb);
 
 	return NF_STOLEN;

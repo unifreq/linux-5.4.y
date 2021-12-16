@@ -75,6 +75,8 @@ struct nf_ct_event {
 #ifdef CONFIG_NF_CONNTRACK_CHAIN_EVENTS
 extern int nf_conntrack_register_notifier(struct net *net, struct notifier_block *nb);
 extern int nf_conntrack_unregister_notifier(struct net *net, struct notifier_block *nb);
+extern int nf_conntrack_register_chain_notifier(struct net *net, struct notifier_block *nb);
+extern int nf_conntrack_unregister_chain_notifier(struct net *net, struct notifier_block *nb);
 #else
 struct nf_ct_event_notifier {
 	int (*fcn)(unsigned int events, struct nf_ct_event *item);
