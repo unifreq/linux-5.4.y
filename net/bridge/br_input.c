@@ -103,14 +103,10 @@ int br_handle_frame_finish(struct net *net, struct sock *sk, struct sk_buff *skb
 		}
 	}
 
-	BR_INPUT_SKB_CB(skb)->brdev = br->dev;
-
-	if (skb->protocol == htons(ETH_P_PAE) && !br->disable_eap_hack)
-		return br_pass_frame_up(skb);
-
 	if (p->state == BR_STATE_LEARNING)
 		goto drop;
 
+	BR_INPUT_SKB_CB(skb)->brdev = br->dev;
 	BR_INPUT_SKB_CB(skb)->src_port_isolated = !!(p->flags & BR_ISOLATED);
 
 	if (IS_ENABLED(CONFIG_INET) &&
