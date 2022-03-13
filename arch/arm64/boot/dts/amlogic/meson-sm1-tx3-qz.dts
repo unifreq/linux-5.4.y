@@ -2,23 +2,37 @@
 /*
  * Copyright (c) 2019 BayLibre SAS. All rights reserved.
  * Copyright (c) 2020 Christian Hewitt <christianshewitt@gmail.com>
- * Copyright (c) 2021 flippy <uniqfreq@gmail.com>
+ * Copyright (c) 2022 flippy <uniqfreq@gmail.com>
  */
 
 /dts-v1/;
 
 #include "meson-sm1-ac2xx.dtsi"
+#include <dt-bindings/leds/common.h>
 #include <dt-bindings/sound/meson-g12a-tohdmitx.h>
 
 / {
-	//compatible = "amediatech,x96-max-plus", "amlogic,sm1";
-	//model = "Shenzhen Amediatech Technology Co., Ltd X96 Max+";
-	compatible = "amlogic,sm1";
-	model = "AMedia X96 Max+";
+	compatible = "tanix,tx3-qz", "amlogic,sm1";
+	model = "Tanix TX3 (QZ)";
+
+	leds {
+		compatible = "gpio-leds";
+		
+		sys_led {
+			led_name = "sys_led";
+                        gpios = <&gpio_ao GPIOAO_11 GPIO_ACTIVE_LOW>;
+			default-state = "on";
+		};
+	};
+
+	memory@0 {
+		device_type = "memory";
+		reg = <0x0 0x0 0x0 0x80000000>;
+	};
 
 	sound {
 		compatible = "amlogic,axg-sound-card";
-		model = "X96-MAX";
+		model = "TX3";
 		audio-aux-devs = <&tdmout_b>;
 		audio-routing = "TDMOUT_B IN 0", "FRDDR_A OUT 1",
 				"TDMOUT_B IN 1", "FRDDR_B OUT 1",
@@ -83,8 +97,8 @@
 	openvfd {
 		compatible = "open,vfd";
 		dev_name = "openvfd";
-		status = "okay";
-	};
+                status = "okay";
+        };
 };
 
 &vddcpu {
@@ -106,10 +120,10 @@
 
 	pinctrl-0 = <&eth_pins>, <&eth_rgmii_pins>;
 	pinctrl-names = "default";
-	phy-mode = "rgmii";
+	phy-mode = "rgmii-txid";
 	phy-handle = <&external_phy>;
 
-	amlogic,tx-delay-ns = <2>;
+	rx-internal-delay-ps = <800>;
 
 	snps,aal;
 	snps,rxpbl = <0x8>;
@@ -168,21 +182,17 @@
 
 &uart_A {
 	status = "okay";
+
 	pinctrl-0 = <&uart_a_pins>, <&uart_a_cts_rts_pins>;
 	pinctrl-names = "default";
 	uart-has-rtscts;
 
 	bluetooth {
-		compatible = "realtek,rtl8822cs-bt";
-		interrupt-parent = <&gpio_intc>;
-		interrupts = <95 IRQ_TYPE_LEVEL_HIGH>;
-		interrupt-names = "host-wakeup";
+		compatible = "brcm,bcm43438-bt";
 		shutdown-gpios = <&gpio GPIOX_17 GPIO_ACTIVE_HIGH>;
 		max-speed = <2000000>;
 		clocks = <&wifi32k>;
 		clock-names = "lpo";
-		vbat-supply = <&vddao_3v3>;
-		vddio-supply = <&vddio_ao1v8>;
 	};
 };
 
@@ -196,6 +206,7 @@
 
 /* SDIO */
 &sd_emmc_a {
+	/delete-property/ sd-uhs-sdr104;
 	sd-uhs-sdr50;
 	max-frequency = <100000000>;
 
@@ -208,8 +219,7 @@
 
 /* SD card */
 &sd_emmc_b {
-	cap-sd-highspeed;
-	max-frequency = <25000000>;
+	max-frequency = <50000000>;
 };
 
 /* eMMC */
@@ -218,23 +228,6 @@
 };
 
 &cpu_opp_table {
-	opp-100000000 {
-		status = "disabled";
-	};
-
-	opp-250000000 {
-		status = "disabled";
-	};
-
-	opp-500000000 {
-		status = "disabled";
-	};
-
-	opp-750000000 {
-		opp-hz = /bits/ 64 <750000000>;
-		opp-microvolt = <750000>;
-	};
-
 	opp-2016000000 {
 		opp-hz = /bits/ 64 <2016000000>;
 		opp-microvolt = <1000000>;
