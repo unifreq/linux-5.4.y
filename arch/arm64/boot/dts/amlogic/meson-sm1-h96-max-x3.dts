@@ -254,6 +254,8 @@
 
 /* SDIO */
 &sd_emmc_a {
+	sd-uhs-sdr12;
+	sd-uhs-sdr25;
 	sd-uhs-sdr50;
 	max-frequency = <100000000>;
 
