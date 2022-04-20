@@ -393,6 +393,11 @@ config LSI_ET1011C_PHY
 	---help---
 	  Supports the LSI ET1011C PHY.
 
+config JLSEMI_JL2XXX_PHY
+	tristate "JLSemi JL2XXX PHYs"
+	help
+	  Currently supports the JLSemi jl2xxx PHYs.
+
 config LXT_PHY
 	tristate "Intel LXT PHYs"
 	---help---
