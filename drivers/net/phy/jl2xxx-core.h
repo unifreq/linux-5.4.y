@@ -18,8 +18,10 @@
 #include <linux/version.h>
 #include <linux/kernel.h>
 
-#define JL2XX1_PHY_ID		0x937c4032
+#define JL2XX1_PHY_ID		0x937c4030
 #define JLSEMI_PHY_ID_MASK	0xfffffff0
+
+#define JL2101_PHY_ID		0x937c4032
 
 #define MII_JLSEMI_PHY_PAGE	0x1f
 
@@ -97,38 +99,6 @@ int jlsemi_get_bit(struct phy_device *phydev,
 int jlsemi_drivers_register(struct phy_driver *phydrvs, int size);
 
 void jlsemi_drivers_unregister(struct phy_driver *phydrvs, int size);
-
-
-/**
- * module_jlsemi_driver() - Helper macro for registering PHY drivers
- * @__phy_drivers: array of PHY drivers to register
- *
- * Helper macro for PHY drivers which do not do anything special in module
- * init/exit. Each module may only use this macro once, and calling it
- * replaces module_init() and module_exit().
- */
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(4,0,0))
-
-#define jlsemi_module_driver(__phy_drivers, __count)			\
-static int __init phy_module_init(void)					\
-{									\
-	return jlsemi_drivers_register(__phy_drivers, __count);		\
-}									\
-module_init(phy_module_init);						\
-static void __exit phy_module_exit(void)				\
-{									\
-	jlsemi_drivers_unregister(__phy_drivers, __count);		\
-}									\
-module_exit(phy_module_exit)
-
-#define module_jlsemi_driver(__phy_drivers)				\
-	jlsemi_module_driver(__phy_drivers, ARRAY_SIZE(__phy_drivers))
-
-#else
-
-#define module_jlsemi_driver(__phy_drivers)				\
-	module_phy_driver(__phy_drivers)
-#endif
 
 #endif /* _JLSEMI_CORE_H */
 
