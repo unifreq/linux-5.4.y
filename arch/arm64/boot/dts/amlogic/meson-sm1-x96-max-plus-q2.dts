@@ -5,7 +5,7 @@
 
 /dts-v1/;
 
-#include "meson-sm1-h96-max.dts"
+#include "meson-sm1-h96-max-x3.dts"
 
 / {
 	compatible = "x96-max-plus-q2,x96-air-q1000", "amlogic,sm1";
