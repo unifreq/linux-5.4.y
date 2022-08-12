@@ -29,19 +29,13 @@ struct amvdec_buffer {
  * struct amvdec_timestamp - stores a src timestamp along with a VIFIFO offset
  *
  * @list: used to make lists out of this struct
- * @tc: timecode from the v4l2 buffer
- * @ts: timestamp from the VB2 buffer
+ * @ts: timestamp
  * @offset: offset in the VIFIFO where the associated packet was written
- * @flags: flags from the v4l2 buffer
- * @used_count: times this timestamp was checked for a match with a dst buffer
  */
 struct amvdec_timestamp {
 	struct list_head list;
-	struct v4l2_timecode tc;
 	u64 ts;
 	u32 offset;
-	u32 flags;
-	u32 used_count;
 };
 
 struct amvdec_session;
@@ -80,7 +74,6 @@ struct amvdec_core {
 	struct clk *dos_clk;
 	struct clk *vdec_1_clk;
 	struct clk *vdec_hevc_clk;
-	struct clk *vdec_hevcf_clk;
 
 	struct reset_control *esparser_reset;
 
@@ -171,7 +164,6 @@ struct amvdec_format {
 
 enum amvdec_status {
 	STATUS_STOPPED,
-	STATUS_INIT,
 	STATUS_RUNNING,
 	STATUS_NEEDS_RESUME,
 };
@@ -187,7 +179,6 @@ enum amvdec_status {
  * @ctrl_min_buf_capture: V4L2 control V4L2_CID_MIN_BUFFERS_FOR_CAPTURE
  * @fmt_out: vdec pixel format for the OUTPUT queue
  * @pixfmt_cap: V4L2 pixel format for the CAPTURE queue
- * @src_buffer_size: size in bytes of the OUTPUT buffers' only plane
  * @width: current picture width
  * @height: current picture height
  * @colorspace: current colorspace
@@ -229,7 +220,6 @@ struct amvdec_session {
 
 	const struct amvdec_format *fmt_out;
 	u32 pixfmt_cap;
-	u32 src_buffer_size;
 
 	u32 width;
 	u32 height;
@@ -244,11 +234,10 @@ struct amvdec_session {
 	struct work_struct esparser_queue_work;
 
 	unsigned int streamon_cap, streamon_out;
-	unsigned int sequence_cap, sequence_out;
+	unsigned int sequence_cap;
 	unsigned int should_stop;
 	unsigned int keyframe_found;
 	unsigned int num_dst_bufs;
-	unsigned int changed_format;
 
 	u8 canvas_alloc[MAX_CANVAS];
 	u32 canvas_num;
