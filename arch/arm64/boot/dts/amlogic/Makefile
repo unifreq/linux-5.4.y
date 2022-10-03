@@ -69,6 +69,7 @@ dtb-$(CONFIG_ARCH_MESON) += meson-gxm-x92.dtb
 dtb-$(CONFIG_ARCH_MESON) += meson-gxm-mecool-kiii-pro.dtb
 dtb-$(CONFIG_ARCH_MESON) += meson-gxm-octopus-planet.dtb
 dtb-$(CONFIG_ARCH_MESON) += meson-gxm-tx9-pro.dtb
+dtb-$(CONFIG_ARCH_MESON) += meson-gxm-t95z-plus.dtb
 dtb-$(CONFIG_ARCH_MESON) += meson-sm1-sei610.dtb
 dtb-$(CONFIG_ARCH_MESON) += meson-sm1-khadas-vim3l.dtb
 dtb-$(CONFIG_ARCH_MESON) += meson-sm1-x96-max-plus.dtb
