@@ -132,6 +132,10 @@
 	};
 };
 
+&usb {
+	dr_mode = "host";
+};
+
 /* Connected to the Bluetooth module */
 &uart_A {
 	status = "okay";
