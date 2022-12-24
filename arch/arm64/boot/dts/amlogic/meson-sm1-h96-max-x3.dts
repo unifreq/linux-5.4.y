@@ -166,6 +166,7 @@
 
 	pinctrl-0 = <&eth_pins>, <&eth_rgmii_pins>;
 	pinctrl-names = "default";
+	//phy-mode = "rgmii-txid";
 	phy-mode = "rgmii";
 	phy-handle = <&external_phy>;
 
