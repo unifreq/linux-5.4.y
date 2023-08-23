@@ -106,3 +106,4 @@ dtb-$(CONFIG_ARCH_MESON) += meson-sm1-a95xf3-air-gbit.dtb
 dtb-$(CONFIG_ARCH_MESON) += meson-sm1-bananapi-m5.dtb
 dtb-$(CONFIG_ARCH_MESON) += meson-a1-ad401.dtb
 dtb-$(CONFIG_ARCH_MESON) += meson-sm1-x96-max-plus-2101.dtb
+dtb-$(CONFIG_ARCH_MESON) += meson-sm1-x88-pro-x3.dtb
