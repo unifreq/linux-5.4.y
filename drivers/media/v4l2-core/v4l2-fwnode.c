@@ -516,7 +516,6 @@ void v4l2_fwnode_endpoint_free(struct v4l2_fwnode_endpoint *vep)
 		return;
 
 	kfree(vep->link_frequencies);
-	vep->link_frequencies = NULL;
 }
 EXPORT_SYMBOL_GPL(v4l2_fwnode_endpoint_free);
 
