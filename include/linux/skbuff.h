@@ -826,7 +826,6 @@ struct sk_buff {
 #ifdef CONFIG_TLS_DEVICE
 	__u8			decrypted:1;
 #endif
-	__u8			gro_skip:1;
 
 #ifdef CONFIG_SHORTCUT_FE
 	__u8			fast_forwarded:1;
