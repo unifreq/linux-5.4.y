@@ -1152,7 +1152,7 @@ static int ntfs_fill_super(struct super_block *sb, void *data, int silent)
 
 	/* Check bitmap boundary */
 	tt = sbi->used.bitmap.nbits;
-	if (inode->i_size < bitmap_size(tt)) {
+	if (inode->i_size < ntfs3_bitmap_size(tt)) {
 		err = -EINVAL;
 		goto out;
 	}
