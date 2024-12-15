@@ -464,7 +464,7 @@ static int hdmi_codec_hw_params(struct snd_pcm_substream *substream,
 	};
 	int ret, idx;
 
-	dev_info(dai->dev, "%s() width %d rate %d channels %d\n", __func__,
+	dev_dbg(dai->dev, "%s() width %d rate %d channels %d\n", __func__,
 		params_width(params), params_rate(params),
 		params_channels(params));
 

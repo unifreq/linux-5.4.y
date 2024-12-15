@@ -770,7 +770,7 @@ void brcmf_sdiod_sgtable_alloc(struct brcmf_sdio_dev *sdiodev)
 
 	nents = max_t(uint, BRCMF_DEFAULT_RXGLOM_SIZE,
 		      sdiodev->settings->bus.sdio.txglomsz);
-	nents += (nents >> 4) + 1;
+	nents *= 2;
 
 	WARN(nents > sdiodev->max_segment_count, "max_seg_cnt=%u, host_max_seg=%u, nents=%u\n",
 		sdiodev->max_segment_count, host->max_segs, nents);
